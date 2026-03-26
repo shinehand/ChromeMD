@@ -236,6 +236,30 @@ body#chromemd-root {
   border-color: var(--color-btn-save-hover);
 }
 
+/* ── 모드 전환 세그먼트 컨트롤 ───────────────────────────────── */
+.chromemd-mode-switcher {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-btn-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.chromemd-mode-switcher .chromemd-btn {
+  border: none;
+  border-right: 1px solid var(--color-btn-border);
+  border-radius: 0;
+}
+
+.chromemd-mode-switcher .chromemd-btn:hover {
+  border-right: 1px solid var(--color-btn-border);
+}
+
+.chromemd-mode-switcher .chromemd-btn:last-child,
+.chromemd-mode-switcher .chromemd-btn:last-child:hover {
+  border-right: none;
+}
+
 /* ── Main area ────────────────────────────────────────────────── */
 #chromemd-main {
   display: flex;
@@ -342,6 +366,24 @@ body#chromemd-root {
 #chromemd-toast.chromemd-toast-show {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* ── 읽기 진행 표시줄 ────────────────────────────────────────── */
+#chromemd-progress {
+  position: fixed;
+  top: 48px;
+  left: 0;
+  width: 0%;
+  height: 2px;
+  background: var(--color-btn-active-bg);
+  z-index: 9000;
+  transition: width 150ms ease;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#chromemd-progress.chromemd-progress-visible {
+  opacity: 1;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -632,11 +674,238 @@ body#chromemd-root {
     monospace;
 }
 
+/* ── 코드 블록 복사 버튼 ──────────────────────────────────────── */
+.chromemd-code-wrapper {
+  position: relative;
+}
+
+.chromemd-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 500;
+  line-height: 16px;
+  cursor: pointer;
+  border: 1px solid var(--color-btn-border);
+  border-radius: 4px;
+  background: var(--color-canvas-subtle);
+  color: var(--color-fg-muted);
+  opacity: 0;
+  transition: opacity 120ms, background 80ms, color 80ms;
+  outline: 2px solid transparent;
+}
+
+.chromemd-code-wrapper:hover .chromemd-copy-btn {
+  opacity: 1;
+}
+
+.chromemd-copy-btn:hover {
+  background: var(--color-btn-hover);
+  color: var(--color-fg);
+  border-color: var(--color-btn-border-hover);
+}
+
+.chromemd-copy-btn:focus-visible {
+  outline-color: var(--color-btn-active-bg);
+  opacity: 1;
+}
+
+.chromemd-copy-btn.chromemd-copy-success {
+  color: #2da44e;
+  border-color: #2da44e;
+  opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .chromemd-copy-btn.chromemd-copy-success {
+    color: #3fb950;
+    border-color: #3fb950;
+  }
+}
+
+/* ── 툴바 아이콘 버튼 & 구분선 ────────────────────────────────── */
+.chromemd-btn-icon {
+  padding: 5px 7px;
+}
+
+.chromemd-toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--color-border);
+  flex-shrink: 0;
+  margin: 0 4px;
+}
+
+/* ── 사이드바 ─────────────────────────────────────────────────── */
+#chromemd-sidebar {
+  width: 240px;
+  min-width: 240px;
+  display: none;
+  flex-direction: column;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-canvas-subtle);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+#chromemd-sidebar.chromemd-sidebar-open {
+  display: flex;
+}
+
+#chromemd-sidebar-header {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-muted);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+#chromemd-sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── 목차 (TOC) ───────────────────────────────────────────────── */
+.chromemd-toc-list {
+  list-style: none;
+  padding: 4px 0;
+  margin: 0;
+}
+
+.chromemd-toc-item {
+  margin: 0;
+}
+
+.chromemd-toc-item a {
+  display: block;
+  padding: 3px 12px;
+  font-size: 13px;
+  color: var(--color-fg);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 80ms, color 80ms;
+}
+
+.chromemd-toc-item a:hover {
+  background: var(--color-btn-hover);
+  color: var(--color-link);
+}
+
+.chromemd-toc-item a.chromemd-toc-active {
+  color: var(--color-link);
+  font-weight: 600;
+  background: rgba(9, 105, 218, 0.08);
+  border-radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .chromemd-toc-item a.chromemd-toc-active {
+    color: var(--color-link);
+    background: rgba(31, 111, 235, 0.12);
+  }
+}
+
+.chromemd-toc-h1 > a { padding-left: 12px; font-weight: 600; }
+.chromemd-toc-h2 > a { padding-left: 12px; }
+.chromemd-toc-h3 > a { padding-left: 24px; font-size: 12px; }
+.chromemd-toc-h4 > a { padding-left: 36px; font-size: 12px; }
+.chromemd-toc-h5 > a { padding-left: 48px; font-size: 12px; }
+.chromemd-toc-h6 > a { padding-left: 60px; font-size: 12px; color: var(--color-fg-muted); }
+
+/* ── 파일 탐색기 ──────────────────────────────────────────────── */
+.chromemd-file-list {
+  list-style: none;
+  padding: 4px 0;
+  margin: 0;
+}
+
+.chromemd-file-item {
+  margin: 0;
+}
+
+.chromemd-file-subtree {
+  display: none;
+  padding-left: 16px;
+}
+
+.chromemd-file-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: var(--color-fg);
+  text-decoration: none;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: background 80ms;
+}
+
+.chromemd-file-row:hover {
+  background: var(--color-btn-hover);
+}
+
+.chromemd-file-row-current {
+  color: var(--color-link);
+  font-weight: 500;
+}
+
+.chromemd-file-toggle {
+  flex-shrink: 0;
+  font-size: 9px;
+  width: 10px;
+  color: var(--color-fg-muted);
+}
+
+.chromemd-file-icon {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.chromemd-file-icon-md {
+  font-size: 9px;
+  font-weight: 700;
+  color: #ffffff;
+  background: #6f42c1;
+  border-radius: 3px;
+  padding: 1px 3px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+  line-height: 1.4;
+}
+
+.chromemd-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.chromemd-sidebar-empty,
+.chromemd-sidebar-loading {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--color-fg-muted);
+  line-height: 1.5;
+}
+
 /* ══════════════════════════════════════════════════════════════════
    인쇄 스타일 (@media print)
    ══════════════════════════════════════════════════════════════════ */
 @media print {
   #chromemd-toolbar,
+  #chromemd-sidebar,
   #chromemd-editor,
   #chromemd-status,
   #chromemd-toast {
