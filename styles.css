@@ -236,6 +236,30 @@ body#chromemd-root {
   border-color: var(--color-btn-save-hover);
 }
 
+/* ── 모드 전환 세그먼트 컨트롤 ───────────────────────────────── */
+.chromemd-mode-switcher {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-btn-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.chromemd-mode-switcher .chromemd-btn {
+  border: none;
+  border-right: 1px solid var(--color-btn-border);
+  border-radius: 0;
+}
+
+.chromemd-mode-switcher .chromemd-btn:hover {
+  border-right: 1px solid var(--color-btn-border);
+}
+
+.chromemd-mode-switcher .chromemd-btn:last-child,
+.chromemd-mode-switcher .chromemd-btn:last-child:hover {
+  border-right: none;
+}
+
 /* ── Main area ────────────────────────────────────────────────── */
 #chromemd-main {
   display: flex;
@@ -342,6 +366,24 @@ body#chromemd-root {
 #chromemd-toast.chromemd-toast-show {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* ── 읽기 진행 표시줄 ────────────────────────────────────────── */
+#chromemd-progress {
+  position: fixed;
+  top: 48px;
+  left: 0;
+  width: 0%;
+  height: 2px;
+  background: var(--color-btn-active-bg);
+  z-index: 9000;
+  transition: width 150ms ease;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#chromemd-progress.chromemd-progress-visible {
+  opacity: 1;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -632,6 +674,58 @@ body#chromemd-root {
     monospace;
 }
 
+/* ── 코드 블록 복사 버튼 ──────────────────────────────────────── */
+.chromemd-code-wrapper {
+  position: relative;
+}
+
+.chromemd-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 500;
+  line-height: 16px;
+  cursor: pointer;
+  border: 1px solid var(--color-btn-border);
+  border-radius: 4px;
+  background: var(--color-canvas-subtle);
+  color: var(--color-fg-muted);
+  opacity: 0;
+  transition: opacity 120ms, background 80ms, color 80ms;
+  outline: 2px solid transparent;
+}
+
+.chromemd-code-wrapper:hover .chromemd-copy-btn {
+  opacity: 1;
+}
+
+.chromemd-copy-btn:hover {
+  background: var(--color-btn-hover);
+  color: var(--color-fg);
+  border-color: var(--color-btn-border-hover);
+}
+
+.chromemd-copy-btn:focus-visible {
+  outline-color: var(--color-btn-active-bg);
+  opacity: 1;
+}
+
+.chromemd-copy-btn.chromemd-copy-success {
+  color: #2da44e;
+  border-color: #2da44e;
+  opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .chromemd-copy-btn.chromemd-copy-success {
+    color: #3fb950;
+    border-color: #3fb950;
+  }
+}
+
 /* ── 툴바 아이콘 버튼 & 구분선 ────────────────────────────────── */
 .chromemd-btn-icon {
   padding: 5px 7px;
@@ -705,6 +799,20 @@ body#chromemd-root {
 .chromemd-toc-item a:hover {
   background: var(--color-btn-hover);
   color: var(--color-link);
+}
+
+.chromemd-toc-item a.chromemd-toc-active {
+  color: var(--color-link);
+  font-weight: 600;
+  background: rgba(9, 105, 218, 0.08);
+  border-radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .chromemd-toc-item a.chromemd-toc-active {
+    color: var(--color-link);
+    background: rgba(31, 111, 235, 0.12);
+  }
 }
 
 .chromemd-toc-h1 > a { padding-left: 12px; font-weight: 600; }

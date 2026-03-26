@@ -21,6 +21,8 @@
   let isDirty = false;
   let previewScrollTop = 0; // 보기 모드 스크롤 위치 복원용
   let sidebarMode = null;   // null | 'toc' | 'files'
+  let tocObserver = null;   // IntersectionObserver for TOC active-heading tracking
+  const copyTimers = new WeakMap(); // timers for copy-button feedback reset
 
   /** ──────────────────────────────
    *  Bootstrap
@@ -195,7 +197,8 @@
     const words = rawMarkdown.trim() === '' ? 0 : rawMarkdown.trim().split(/\s+/).length;
     const chars = rawMarkdown.length;
     const lines = rawMarkdown.split('\n').length;
-    wcEl.textContent = `${lines}줄 · ${words}단어 · ${chars}글자`;
+    const readMins = Math.max(1, Math.ceil(words / 200));
+    wcEl.textContent = `${lines}줄 · ${words}단어 · ${chars}글자 · 약 ${readMins}분`;
 
     if (cursorEl) {
       if (currentMode !== 'view') {
@@ -252,15 +255,24 @@
         <span class="chromemd-dirty" id="chromemd-dirty" style="display:none" title="저장되지 않은 변경 사항">●</span>
       </div>
       <div class="chromemd-toolbar-center">
-        <button id="btn-view"  class="chromemd-btn chromemd-btn-active" title="보기 모드 (Ctrl+E)">보기</button>
-        <button id="btn-split" class="chromemd-btn" title="분할 모드">분할</button>
-        <button id="btn-edit"  class="chromemd-btn" title="편집 모드 (Ctrl+E)">편집</button>
+        <div class="chromemd-mode-switcher" role="group" aria-label="보기 모드">
+          <button id="btn-view"  class="chromemd-btn chromemd-btn-active" title="보기 모드 (Ctrl+E)">보기</button>
+          <button id="btn-split" class="chromemd-btn" title="분할 모드">분할</button>
+          <button id="btn-edit"  class="chromemd-btn" title="편집 모드 (Ctrl+E)">편집</button>
+        </div>
       </div>
       <div class="chromemd-toolbar-right">
+        <button id="btn-print" class="chromemd-btn chromemd-btn-icon" title="인쇄 (Ctrl+P)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 1a2 2 0 00-2 2v1h10V3a2 2 0 00-2-2H5zm6 8H5a1 1 0 00-1 1v3h8v-3a1 1 0 00-1-1z"/><path d="M0 7a2 2 0 012-2h12a2 2 0 012 2v3a2 2 0 01-2 2h-1v-2a2 2 0 00-2-2H5a2 2 0 00-2 2v2H2a2 2 0 01-2-2V7zm2.5 1a.5.5 0 100-1 .5.5 0 000 1z"/></svg></button>
         <button id="btn-save" class="chromemd-btn chromemd-btn-save" title="파일 저장 (Ctrl+S)">💾 저장</button>
       </div>
     `;
     body.appendChild(toolbar);
+
+    // ── 읽기 진행 표시줄 ─────────────────────────────────────────
+    const progressBar = document.createElement('div');
+    progressBar.id = 'chromemd-progress';
+    progressBar.classList.add('chromemd-progress-visible');
+    body.appendChild(progressBar);
 
     // ── 메인 콘텐츠 영역 ────────────────────────────────
     const main = document.createElement('div');
@@ -285,6 +297,7 @@
     article.id = 'chromemd-article';
     article.className = 'markdown-body';
     article.innerHTML = renderMarkdown(md);
+    addCopyButtons(article);
     preview.appendChild(article);
     main.appendChild(preview);
 
@@ -298,6 +311,15 @@
     textarea.value = md;
     editor.appendChild(textarea);
     main.appendChild(editor);
+
+    // 읽기 진행 표시줄 스크롤 업데이트
+    preview.addEventListener('scroll', () => {
+      const bar = document.getElementById('chromemd-progress');
+      if (bar) {
+        const scrollable = preview.scrollHeight - preview.clientHeight;
+        bar.style.width = (scrollable > 0 ? preview.scrollTop / scrollable * 100 : 100) + '%';
+      }
+    });
 
     // ── 상태 표시줄 ─────────────────────────────────────
     const statusBar = document.createElement('div');
@@ -315,12 +337,14 @@
     document.getElementById('btn-save').addEventListener('click', saveFile);
     document.getElementById('btn-sidebar-files').addEventListener('click', () => toggleSidebar('files'));
     document.getElementById('btn-sidebar-toc').addEventListener('click', () => toggleSidebar('toc'));
+    document.getElementById('btn-print').addEventListener('click', () => window.print());
 
     textarea.addEventListener('input', () => {
       rawMarkdown = textarea.value;
       markDirty(true);
       if (currentMode === 'split') {
         article.innerHTML = renderMarkdown(rawMarkdown);
+        addCopyButtons(article);
       }
       updateStatusBar();
     });
@@ -338,6 +362,7 @@
         markDirty(true);
         if (currentMode === 'split') {
           article.innerHTML = renderMarkdown(rawMarkdown);
+          addCopyButtons(article);
         }
         updateStatusBar();
       }
@@ -441,6 +466,41 @@
 
     content.innerHTML = '';
     content.appendChild(ul);
+    setupTocObserver();
+  }
+
+  /** ──────────────────────────────
+   *  목차 활성 항목 추적 (IntersectionObserver)
+   * ────────────────────────────── */
+  function setupTocObserver() {
+    if (tocObserver) { tocObserver.disconnect(); tocObserver = null; }
+    const article = document.getElementById('chromemd-article');
+    const preview = document.getElementById('chromemd-preview');
+    if (!article || !preview) return;
+    const headings = article.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    if (headings.length === 0) return;
+
+    tocObserver = new IntersectionObserver((entries) => {
+      let topEntry = null;
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          if (!topEntry || entry.boundingClientRect.top < topEntry.boundingClientRect.top) {
+            topEntry = entry;
+          }
+        }
+      });
+      if (topEntry) updateTocActiveItem(topEntry.target.id);
+    }, { root: preview, rootMargin: '0px 0px -60% 0px', threshold: 0 });
+
+    headings.forEach(h => { if (h.id) tocObserver.observe(h); });
+  }
+
+  function updateTocActiveItem(id) {
+    const content = document.getElementById('chromemd-sidebar-content');
+    if (!content) return;
+    content.querySelectorAll('.chromemd-toc-item a').forEach(a => {
+      a.classList.toggle('chromemd-toc-active', a.getAttribute('href') === '#' + id);
+    });
   }
 
   /** ──────────────────────────────
@@ -589,9 +649,59 @@
   }
 
   /** ──────────────────────────────
+   *  코드 블록 복사 버튼
+   * ────────────────────────────── */
+  function addCopyButtons(container) {
+    container.querySelectorAll('pre').forEach(pre => {
+      if (pre.parentNode && pre.parentNode.classList.contains('chromemd-code-wrapper')) return;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'chromemd-code-wrapper';
+      pre.parentNode.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
+
+      const btn = document.createElement('button');
+      btn.className = 'chromemd-copy-btn';
+      btn.textContent = '복사';
+      btn.title = '코드 복사';
+      btn.setAttribute('aria-label', '코드를 클립보드에 복사');
+      btn.addEventListener('click', () => {
+        const code = pre.querySelector('code');
+        const text = code ? code.textContent : pre.textContent;
+        const onCopied = () => {
+          btn.textContent = '✓ 복사됨';
+          btn.classList.add('chromemd-copy-success');
+          clearTimeout(copyTimers.get(btn));
+          copyTimers.set(btn, setTimeout(() => {
+            btn.textContent = '복사';
+            btn.classList.remove('chromemd-copy-success');
+          }, 2000));
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(onCopied).catch(() => { legacyCopy(text); onCopied(); });
+        } else {
+          legacyCopy(text); onCopied();
+        }
+      });
+      wrapper.appendChild(btn);
+    });
+  }
+
+  function legacyCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { document.execCommand('copy'); } catch (err) { console.warn('[ChromeMD] 복사 실패:', err); }
+    document.body.removeChild(ta);
+  }
+
+  /** ──────────────────────────────
    *  모드 전환
    * ────────────────────────────── */
-  function setMode(mode) {    const preview  = document.getElementById('chromemd-preview');
+  function setMode(mode) {
+    const preview  = document.getElementById('chromemd-preview');
     const editor   = document.getElementById('chromemd-editor');
     const article  = document.getElementById('chromemd-article');
     const main     = document.getElementById('chromemd-main');
@@ -610,21 +720,26 @@
 
     if (mode === 'view') {
       article.innerHTML = renderMarkdown(rawMarkdown);
+      addCopyButtons(article);
       preview.style.display = '';
       editor.style.display  = 'none';
       main.classList.remove('chromemd-split');
+      document.getElementById('chromemd-progress')?.classList.add('chromemd-progress-visible');
       // 스크롤 위치 복원
       requestAnimationFrame(() => { preview.scrollTop = previewScrollTop; });
     } else if (mode === 'edit') {
       preview.style.display = 'none';
       editor.style.display  = '';
       main.classList.remove('chromemd-split');
+      document.getElementById('chromemd-progress')?.classList.remove('chromemd-progress-visible');
       textarea.focus();
     } else if (mode === 'split') {
       article.innerHTML = renderMarkdown(rawMarkdown);
+      addCopyButtons(article);
       preview.style.display = '';
       editor.style.display  = '';
       main.classList.add('chromemd-split');
+      document.getElementById('chromemd-progress')?.classList.add('chromemd-progress-visible');
       textarea.focus();
     }
 
