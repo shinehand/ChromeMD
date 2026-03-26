@@ -20,6 +20,7 @@
   let currentMode = 'view'; // 'view' | 'edit' | 'split'
   let isDirty = false;
   let previewScrollTop = 0; // 보기 모드 스크롤 위치 복원용
+  let sidebarMode = null;   // null | 'toc' | 'files'
 
   /** ──────────────────────────────
    *  Bootstrap
@@ -243,6 +244,9 @@
     toolbar.id = 'chromemd-toolbar';
     toolbar.innerHTML = `
       <div class="chromemd-toolbar-left">
+        <button id="btn-sidebar-files" class="chromemd-btn chromemd-btn-icon" title="파일 탐색기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5a.25.25 0 01-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"/></svg></button>
+        <button id="btn-sidebar-toc" class="chromemd-btn chromemd-btn-icon" title="목차"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M0 2.75A.75.75 0 01.75 2h14.5a.75.75 0 010 1.5H.75A.75.75 0 010 2.75zm0 5A.75.75 0 01.75 7h14.5a.75.75 0 010 1.5H.75A.75.75 0 010 7.75zm0 5a.75.75 0 01.75-.75H8.25a.75.75 0 010 1.5H.75a.75.75 0 01-.75-.75z"/></svg></button>
+        <span class="chromemd-toolbar-sep"></span>
         <span class="chromemd-icon">📄</span>
         <span class="chromemd-filename" title="${escapeHtml(url)}">${escapeHtml(getFilename())}</span>
         <span class="chromemd-dirty" id="chromemd-dirty" style="display:none" title="저장되지 않은 변경 사항">●</span>
@@ -262,6 +266,17 @@
     const main = document.createElement('div');
     main.id = 'chromemd-main';
     body.appendChild(main);
+
+    // ── 사이드바 ─────────────────────────────────────────────────
+    const sidebar = document.createElement('div');
+    sidebar.id = 'chromemd-sidebar';
+    const sidebarHeader = document.createElement('div');
+    sidebarHeader.id = 'chromemd-sidebar-header';
+    sidebar.appendChild(sidebarHeader);
+    const sidebarContent = document.createElement('div');
+    sidebarContent.id = 'chromemd-sidebar-content';
+    sidebar.appendChild(sidebarContent);
+    main.appendChild(sidebar);
 
     // 미리보기 패널
     const preview = document.createElement('div');
@@ -298,6 +313,8 @@
     document.getElementById('btn-split').addEventListener('click', () => setMode('split'));
     document.getElementById('btn-edit').addEventListener('click', () => setMode('edit'));
     document.getElementById('btn-save').addEventListener('click', saveFile);
+    document.getElementById('btn-sidebar-files').addEventListener('click', () => toggleSidebar('files'));
+    document.getElementById('btn-sidebar-toc').addEventListener('click', () => toggleSidebar('toc'));
 
     textarea.addEventListener('input', () => {
       rawMarkdown = textarea.value;
@@ -346,10 +363,235 @@
   }
 
   /** ──────────────────────────────
+   *  사이드바 토글
+   * ────────────────────────────── */
+  function toggleSidebar(mode) {
+    const sidebar  = document.getElementById('chromemd-sidebar');
+    const btnFiles = document.getElementById('btn-sidebar-files');
+    const btnToc   = document.getElementById('btn-sidebar-toc');
+    if (sidebarMode === mode) {
+      sidebarMode = null;
+      sidebar.classList.remove('chromemd-sidebar-open');
+      btnFiles.classList.remove('chromemd-btn-active');
+      btnToc.classList.remove('chromemd-btn-active');
+    } else {
+      sidebarMode = mode;
+      sidebar.classList.add('chromemd-sidebar-open');
+      btnFiles.classList.toggle('chromemd-btn-active', mode === 'files');
+      btnToc.classList.toggle('chromemd-btn-active', mode === 'toc');
+      const hdr = document.getElementById('chromemd-sidebar-header');
+      if (hdr) hdr.textContent = mode === 'toc' ? '목차' : '파일';
+      if (mode === 'toc') buildTOC();
+      else buildFileExplorer();
+    }
+  }
+
+  /** ──────────────────────────────
+   *  목차 (TOC) 생성
+   * ────────────────────────────── */
+  function buildTOC() {
+    const content = document.getElementById('chromemd-sidebar-content');
+    if (!content) return;
+
+    const headings = [];
+    let inCode = false;
+    rawMarkdown.split('\n').forEach(line => {
+      if (line.startsWith('```')) { inCode = !inCode; return; }
+      if (inCode) return;
+      const m = line.match(/^(#{1,6})\s+(.+)/);
+      if (m) {
+        const level      = m[1].length;
+        const rawText    = m[2].trim();
+        const displayText = rawText
+          .replace(/\*\*(.*?)\*\*/g, '$1')
+          .replace(/\*(.*?)\*/g, '$1')
+          .replace(/`(.*?)`/g, '$1')
+          .replace(/\[(.*?)\]\(.*?\)/g, '$1');
+        headings.push({ level, displayText, id: slugify(rawText) });
+      }
+    });
+
+    if (headings.length === 0) {
+      content.innerHTML = '<p class="chromemd-sidebar-empty">목차가 없습니다.</p>';
+      return;
+    }
+
+    const ul = document.createElement('ul');
+    ul.className = 'chromemd-toc-list';
+    headings.forEach(({ level, displayText, id }) => {
+      const li = document.createElement('li');
+      li.className = `chromemd-toc-item chromemd-toc-h${level}`;
+      const a = document.createElement('a');
+      a.href = '#' + id;
+      a.textContent = displayText;
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        if (currentMode === 'edit') setMode('view');
+        const preview = document.getElementById('chromemd-preview');
+        const target  = document.getElementById(id);
+        if (preview && target) {
+          const rect    = target.getBoundingClientRect();
+          const pRect   = preview.getBoundingClientRect();
+          preview.scrollBy({ top: rect.top - pRect.top - 16, behavior: 'smooth' });
+        }
+      });
+      li.appendChild(a);
+      ul.appendChild(li);
+    });
+
+    content.innerHTML = '';
+    content.appendChild(ul);
+  }
+
+  /** ──────────────────────────────
+   *  파일 탐색기 빌드
+   * ────────────────────────────── */
+  async function buildFileExplorer() {
+    const content = document.getElementById('chromemd-sidebar-content');
+    const hdr     = document.getElementById('chromemd-sidebar-header');
+    if (!content) return;
+
+    if (!url.startsWith('file://')) {
+      content.innerHTML = '<p class="chromemd-sidebar-empty">파일 탐색기는 로컬 파일에서만 사용 가능합니다.</p>';
+      return;
+    }
+
+    content.innerHTML = '<p class="chromemd-sidebar-loading">불러오는 중…</p>';
+    const parentUrl = url.substring(0, url.lastIndexOf('/') + 1);
+
+    if (hdr) {
+      const parts = decodeURIComponent(parentUrl).replace(/\/$/, '').split('/');
+      hdr.textContent = parts[parts.length - 1] || '파일';
+    }
+
+    await loadAndRenderDir(content, parentUrl, url);
+  }
+
+  async function loadAndRenderDir(container, dirUrl, currentFileUrl) {
+    try {
+      const res = await fetch(dirUrl);
+      if (!res.ok) throw new Error('not ok');
+      const html   = await res.text();
+      const parser = new DOMParser();
+      const doc    = parser.parseFromString(html, 'text/html');
+      const entries = [];
+
+      for (const a of doc.querySelectorAll('a[href]')) {
+        const href = a.getAttribute('href');
+        if (!href || href === '../' || href.startsWith('..') ||
+            href.startsWith('?') || href.startsWith('#')) continue;
+        const isDir = href.endsWith('/');
+        const name  = decodeURIComponent(href.replace(/\/$/, '').split('/').pop());
+        if (!name || name.startsWith('.')) continue;
+        entries.push({ name, href: new URL(href, dirUrl).href, isDir });
+      }
+
+      entries.sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      });
+
+      renderFileEntries(container, entries, currentFileUrl);
+    } catch (_) {
+      container.innerHTML = '<p class="chromemd-sidebar-empty">폴더를 불러올 수 없습니다.</p>';
+    }
+  }
+
+  function renderFileEntries(container, entries, currentFileUrl) {
+    if (entries.length === 0) {
+      container.innerHTML = '<p class="chromemd-sidebar-empty">파일이 없습니다.</p>';
+      return;
+    }
+
+    const ul = document.createElement('ul');
+    ul.className = 'chromemd-file-list';
+
+    entries.forEach(entry => {
+      const li        = document.createElement('li');
+      const isCurrent = entry.href === currentFileUrl;
+      const isMd      = !entry.isDir &&
+        /\.(md|markdown|mdown|mkd|mkdn|mdwn|mdtxt|mdtext|text)$/i.test(entry.name);
+      li.className = 'chromemd-file-item';
+
+      if (entry.isDir) {
+        const row    = document.createElement('div');
+        row.className = 'chromemd-file-row';
+        row.setAttribute('role', 'button');
+        row.setAttribute('tabindex', '0');
+
+        const toggle = document.createElement('span');
+        toggle.className = 'chromemd-file-toggle';
+        toggle.textContent = '▶';
+
+        const icon = document.createElement('span');
+        icon.className = 'chromemd-file-icon';
+        icon.textContent = '📁';
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'chromemd-file-name';
+        nameEl.textContent = entry.name;
+
+        row.appendChild(toggle);
+        row.appendChild(icon);
+        row.appendChild(nameEl);
+        li.appendChild(row);
+
+        const sub = document.createElement('div');
+        sub.className = 'chromemd-file-subtree';
+        li.appendChild(sub);
+
+        let open = false;
+        const expandDir = async () => {
+          open = !open;
+          toggle.textContent = open ? '▼' : '▶';
+          sub.style.display = open ? '' : 'none';
+          if (open && !sub.dataset.loaded) {
+            sub.dataset.loaded = '1';
+            sub.innerHTML = '<p class="chromemd-sidebar-loading">불러오는 중…</p>';
+            await loadAndRenderDir(sub, entry.href, currentFileUrl);
+          }
+        };
+        row.addEventListener('click', expandDir);
+        row.addEventListener('keydown', e => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); expandDir(); }
+        });
+
+      } else {
+        const a = document.createElement('a');
+        a.className = 'chromemd-file-row' + (isCurrent ? ' chromemd-file-row-current' : '');
+        a.href = entry.href;
+
+        const icon = document.createElement('span');
+        icon.className = 'chromemd-file-icon' + (isMd ? ' chromemd-file-icon-md' : '');
+        icon.textContent = isMd ? 'M' : '📄';
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'chromemd-file-name';
+        nameEl.textContent = entry.name;
+
+        a.appendChild(icon);
+        a.appendChild(nameEl);
+        li.appendChild(a);
+
+        if (!isCurrent) {
+          a.addEventListener('click', e => {
+            e.preventDefault();
+            window.location.href = entry.href;
+          });
+        }
+      }
+
+      ul.appendChild(li);
+    });
+
+    container.innerHTML = '';
+    container.appendChild(ul);
+  }
+
+  /** ──────────────────────────────
    *  모드 전환
    * ────────────────────────────── */
-  function setMode(mode) {
-    const preview  = document.getElementById('chromemd-preview');
+  function setMode(mode) {    const preview  = document.getElementById('chromemd-preview');
     const editor   = document.getElementById('chromemd-editor');
     const article  = document.getElementById('chromemd-article');
     const main     = document.getElementById('chromemd-main');
@@ -386,6 +628,7 @@
       textarea.focus();
     }
 
+    if (sidebarMode === 'toc') buildTOC();
     updateStatusBar();
   }
 
