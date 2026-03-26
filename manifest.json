@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "ChromeMD - Markdown Reader & Editor",
+  "version": "1.0.0",
+  "description": "View and edit Markdown files in Chrome with GitHub-style rendering, syntax highlighting, and save support.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "downloads"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "file://*/*.md",
+        "file://*/*.markdown",
+        "file://*/*.mdown",
+        "file://*/*.mkd",
+        "file://*/*.mkdn",
+        "file://*/*.mdwn",
+        "file://*/*.mdtxt",
+        "file://*/*.mdtext",
+        "file://*/*.text",
+        "http://*/*/*.md",
+        "http://*/*/*.markdown",
+        "https://*/*/*.md",
+        "https://*/*/*.markdown"
+      ],
+      "js": [
+        "lib/marked.min.js",
+        "lib/highlight.min.js",
+        "content.js"
+      ],
+      "css": [
+        "lib/highlight-github.min.css",
+        "styles.css"
+      ],
+      "run_at": "document_end",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/*",
+        "icons/*",
+        "styles.css"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
