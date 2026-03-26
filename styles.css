@@ -3,6 +3,95 @@
    GitHub-style markdown rendering with a clean toolbar UI
    ══════════════════════════════════════════════════════════════════ */
 
+/* ── CSS 변수 (라이트 모드 기본값) ────────────────────────────── */
+:root {
+  --color-bg:              #ffffff;
+  --color-fg:              #24292f;
+  --color-heading:         #1f2328;
+  --color-fg-muted:        #57606a;
+  --color-border:          #d0d7de;
+  --color-border-muted:    #d8dee4;
+  --color-canvas-subtle:   #f6f8fa;
+  --color-link:            #0969da;
+  --color-toolbar-bg:      #f6f8fa;
+  --color-code-bg:         #f6f8fa;
+  --color-editor-focus-bg: #fffef8;
+  --color-btn-bg:          #ffffff;
+  --color-btn-hover:       #f3f4f6;
+  --color-btn-border:      rgba(31, 35, 40, 0.15);
+  --color-btn-border-hover:rgba(31, 35, 40, 0.3);
+  --color-btn-active-bg:   #1178cf;
+  --color-btn-active-border:#1178cf;
+  --color-btn-save-bg:     #2da44e;
+  --color-btn-save-border: #2da44e;
+  --color-btn-save-hover:  #2c974b;
+  --color-dirty:           #cf222e;
+  --color-status-bg:       #f6f8fa;
+  --color-status-fg:       #57606a;
+  --color-toast-bg:        #24292f;
+  --color-toast-fg:        #ffffff;
+  --color-hljs-bg:         #f6f8fa;
+  --color-hljs-fg:         #24292e;
+  --color-anchor:          #57606a;
+}
+
+/* ── 다크 모드 오버라이드 ─────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg:              #0d1117;
+    --color-fg:              #e6edf3;
+    --color-heading:         #f0f6fc;
+    --color-fg-muted:        #8b949e;
+    --color-border:          #30363d;
+    --color-border-muted:    #21262d;
+    --color-canvas-subtle:   #161b22;
+    --color-link:            #58a6ff;
+    --color-toolbar-bg:      #161b22;
+    --color-code-bg:         #161b22;
+    --color-editor-focus-bg: #131720;
+    --color-btn-bg:          #21262d;
+    --color-btn-hover:       #30363d;
+    --color-btn-border:      rgba(240, 246, 252, 0.1);
+    --color-btn-border-hover:rgba(240, 246, 252, 0.2);
+    --color-btn-active-bg:   #1f6feb;
+    --color-btn-active-border:#1f6feb;
+    --color-btn-save-bg:     #238636;
+    --color-btn-save-border: #2ea043;
+    --color-btn-save-hover:  #2ea043;
+    --color-dirty:           #f85149;
+    --color-status-bg:       #161b22;
+    --color-status-fg:       #8b949e;
+    --color-toast-bg:        #f0f6fc;
+    --color-toast-fg:        #0d1117;
+    --color-hljs-bg:         #161b22;
+    --color-hljs-fg:         #e6edf3;
+    --color-anchor:          #484f58;
+  }
+
+  /* 다크 모드 구문 강조 (GitHub Dark) */
+  .hljs                           { background: var(--color-hljs-bg) !important; color: var(--color-hljs-fg) !important; }
+  .hljs-comment,
+  .hljs-quote                     { color: #8b949e !important; }
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-deletion                  { color: #ff7b72 !important; }
+  .hljs-string,
+  .hljs-addition,
+  .hljs-attr                      { color: #a5d6ff !important; }
+  .hljs-number,
+  .hljs-literal                   { color: #79c0ff !important; }
+  .hljs-built_in,
+  .hljs-builtin-name              { color: #ffa657 !important; }
+  .hljs-name,
+  .hljs-tag                       { color: #7ee787 !important; }
+  .hljs-title,
+  .hljs-section                   { color: #d2a8ff !important; }
+  .hljs-type,
+  .hljs-class .hljs-title         { color: #f0883e !important; }
+  .hljs-variable,
+  .hljs-template-variable         { color: #ffa657 !important; }
+}
+
 /* ── Reset & base ─────────────────────────────────────────────── */
 *,
 *::before,
@@ -19,8 +108,8 @@ body#chromemd-root {
     sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
   font-size: 16px;
   line-height: 1.5;
-  color: #24292f;
-  background: #ffffff;
+  color: var(--color-fg);
+  background: var(--color-bg);
 }
 
 body#chromemd-root {
@@ -37,8 +126,8 @@ body#chromemd-root {
   padding: 0 16px;
   height: 48px;
   min-height: 48px;
-  background: #f6f8fa;
-  border-bottom: 1px solid #d0d7de;
+  background: var(--color-toolbar-bg);
+  border-bottom: 1px solid var(--color-border);
   user-select: none;
   flex-shrink: 0;
   gap: 12px;
@@ -75,7 +164,7 @@ body#chromemd-root {
 .chromemd-filename {
   font-size: 14px;
   font-weight: 600;
-  color: #24292f;
+  color: var(--color-fg);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -83,7 +172,7 @@ body#chromemd-root {
 
 .chromemd-dirty {
   font-size: 18px;
-  color: #cf222e;
+  color: var(--color-dirty);
   line-height: 1;
   flex-shrink: 0;
 }
@@ -98,23 +187,29 @@ body#chromemd-root {
   font-weight: 500;
   line-height: 20px;
   cursor: pointer;
-  border: 1px solid rgba(31, 35, 40, 0.15);
+  border: 1px solid var(--color-btn-border);
   border-radius: 6px;
-  background: #ffffff;
-  color: #24292f;
+  background: var(--color-btn-bg);
+  color: var(--color-fg);
   white-space: nowrap;
   transition: background 80ms, border-color 80ms;
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 }
 
 .chromemd-btn:hover {
-  background: #f3f4f6;
-  border-color: rgba(31, 35, 40, 0.3);
+  background: var(--color-btn-hover);
+  border-color: var(--color-btn-border-hover);
+}
+
+/* 포커스 링 (접근성) */
+.chromemd-btn:focus-visible {
+  outline-color: var(--color-btn-active-bg);
 }
 
 .chromemd-btn-active {
-  background: #1178cf;
-  border-color: #1178cf;
+  background: var(--color-btn-active-bg);
+  border-color: var(--color-btn-active-border);
   color: #ffffff;
 }
 
@@ -123,15 +218,22 @@ body#chromemd-root {
   border-color: #0969da;
 }
 
+@media (prefers-color-scheme: dark) {
+  .chromemd-btn-active:hover {
+    background: #388bfd;
+    border-color: #388bfd;
+  }
+}
+
 .chromemd-btn-save {
-  background: #2da44e;
-  border-color: #2da44e;
+  background: var(--color-btn-save-bg);
+  border-color: var(--color-btn-save-border);
   color: #ffffff;
 }
 
 .chromemd-btn-save:hover {
-  background: #2c974b;
-  border-color: #2c974b;
+  background: var(--color-btn-save-hover);
+  border-color: var(--color-btn-save-hover);
 }
 
 /* ── Main area ────────────────────────────────────────────────── */
@@ -160,7 +262,7 @@ body#chromemd-root {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-left: 1px solid #d0d7de;
+  border-left: 1px solid var(--color-border);
 }
 
 #chromemd-textarea {
@@ -172,8 +274,8 @@ body#chromemd-root {
     monospace;
   font-size: 14px;
   line-height: 1.6;
-  color: #24292f;
-  background: #ffffff;
+  color: var(--color-fg);
+  background: var(--color-bg);
   border: none;
   resize: none;
   outline: none;
@@ -181,28 +283,53 @@ body#chromemd-root {
 }
 
 #chromemd-textarea:focus {
-  background: #fffef8;
+  background: var(--color-editor-focus-bg);
 }
 
 /* Split mode */
 #chromemd-main.chromemd-split #chromemd-preview {
   padding: 24px;
-  border-right: 1px solid #d0d7de;
+  border-right: 1px solid var(--color-border);
 }
 
 #chromemd-main.chromemd-split #chromemd-editor {
   border-left: none;
 }
 
+/* ── 상태 표시줄 (Status Bar) ─────────────────────────────────── */
+#chromemd-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 26px;
+  min-height: 26px;
+  background: var(--color-status-bg);
+  border-top: 1px solid var(--color-border);
+  font-size: 11px;
+  color: var(--color-status-fg);
+  flex-shrink: 0;
+  user-select: none;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+}
+
+#chromemd-status-cursor {
+  flex-shrink: 0;
+}
+
+#chromemd-status-wc {
+  flex-shrink: 0;
+}
+
 /* ── Toast ────────────────────────────────────────────────────── */
 #chromemd-toast {
   position: fixed;
-  bottom: 24px;
+  bottom: 40px;
   right: 24px;
   z-index: 99999;
   padding: 10px 16px;
-  background: #24292f;
-  color: #ffffff;
+  background: var(--color-toast-bg);
+  color: var(--color-toast-fg);
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
@@ -223,7 +350,7 @@ body#chromemd-root {
    ══════════════════════════════════════════════════════════════════ */
 
 .markdown-body {
-  color: #24292f;
+  color: var(--color-fg);
   font-size: 16px;
   line-height: 1.5;
   word-wrap: break-word;
@@ -259,25 +386,51 @@ body#chromemd-root {
   margin-bottom: 16px;
   font-weight: 600;
   line-height: 1.25;
-  color: #1f2328;
+  color: var(--color-heading);
+  position: relative;
 }
 
 .markdown-body h1 {
   padding-bottom: 0.3em;
   font-size: 2em;
-  border-bottom: 1px solid #d8dee4;
+  border-bottom: 1px solid var(--color-border-muted);
 }
 
 .markdown-body h2 {
   padding-bottom: 0.3em;
   font-size: 1.5em;
-  border-bottom: 1px solid #d8dee4;
+  border-bottom: 1px solid var(--color-border-muted);
 }
 
 .markdown-body h3 { font-size: 1.25em; }
 .markdown-body h4 { font-size: 1em; }
 .markdown-body h5 { font-size: 0.875em; }
-.markdown-body h6 { font-size: 0.85em; color: #57606a; }
+.markdown-body h6 { font-size: 0.85em; color: var(--color-fg-muted); }
+
+/* ── 제목 앵커 링크 ─────────────────────────────────────────── */
+.markdown-body .heading-anchor {
+  float: left;
+  padding-right: 6px;
+  margin-left: -24px;
+  line-height: 1.25;
+  color: var(--color-anchor);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.markdown-body h1:hover .heading-anchor,
+.markdown-body h2:hover .heading-anchor,
+.markdown-body h3:hover .heading-anchor,
+.markdown-body h4:hover .heading-anchor,
+.markdown-body h5:hover .heading-anchor,
+.markdown-body h6:hover .heading-anchor {
+  opacity: 1;
+}
+
+.markdown-body .heading-anchor:hover {
+  color: var(--color-link);
+}
 
 /* ── Paragraphs & spacing ─────────────────────────────────────── */
 .markdown-body p,
@@ -294,7 +447,7 @@ body#chromemd-root {
 
 /* ── Links ────────────────────────────────────────────────────── */
 .markdown-body a {
-  color: #0969da;
+  color: var(--color-link);
   text-decoration: none;
 }
 
@@ -315,20 +468,26 @@ body#chromemd-root {
     monospace;
 }
 
+@media (prefers-color-scheme: dark) {
+  .markdown-body code,
+  .markdown-body tt {
+    background-color: rgba(110, 118, 129, 0.4);
+  }
+}
+
 .markdown-body pre {
   padding: 16px;
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
-  color: #1f2328;
-  background-color: #f6f8fa;
+  color: var(--color-hljs-fg);
+  background-color: var(--color-code-bg);
   border-radius: 6px;
 }
 
 .markdown-body pre code,
 .markdown-body pre tt {
   display: inline;
-  max-width: auto;
   padding: 0;
   margin: 0;
   overflow: visible;
@@ -342,8 +501,8 @@ body#chromemd-root {
 /* ── Blockquote ───────────────────────────────────────────────── */
 .markdown-body blockquote {
   padding: 0 1em;
-  color: #57606a;
-  border-left: 0.25em solid #d0d7de;
+  color: var(--color-fg-muted);
+  border-left: 0.25em solid var(--color-border);
 }
 
 .markdown-body blockquote > :first-child { margin-top: 0; }
@@ -400,23 +559,23 @@ body#chromemd-root {
 .markdown-body table th,
 .markdown-body table td {
   padding: 6px 13px;
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--color-border);
 }
 
 .markdown-body table tr {
-  background-color: #ffffff;
-  border-top: 1px solid #d8dee4;
+  background-color: var(--color-bg);
+  border-top: 1px solid var(--color-border-muted);
 }
 
 .markdown-body table tr:nth-child(2n) {
-  background-color: #f6f8fa;
+  background-color: var(--color-canvas-subtle);
 }
 
 /* ── Images ───────────────────────────────────────────────────── */
 .markdown-body img {
   max-width: 100%;
   box-sizing: content-box;
-  background-color: #ffffff;
+  background-color: var(--color-bg);
 }
 
 /* ── Horizontal rule ──────────────────────────────────────────── */
@@ -424,7 +583,7 @@ body#chromemd-root {
   height: 0.25em;
   padding: 0;
   margin: 24px 0;
-  background-color: #d8dee4;
+  background-color: var(--color-border-muted);
   border: 0;
 }
 
@@ -462,13 +621,66 @@ body#chromemd-root {
   padding: 3px 5px;
   font-size: 11px;
   line-height: 10px;
-  color: #1f2328;
+  color: var(--color-fg);
   vertical-align: middle;
-  background-color: #f6f8fa;
-  border: solid 1px rgba(175, 184, 193, 0.2);
-  border-bottom-color: rgba(175, 184, 193, 0.2);
+  background-color: var(--color-canvas-subtle);
+  border: solid 1px var(--color-btn-border);
+  border-bottom-color: var(--color-btn-border);
   border-radius: 6px;
-  box-shadow: inset 0 -1px 0 rgba(175, 184, 193, 0.2);
+  box-shadow: inset 0 -1px 0 var(--color-btn-border);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier,
     monospace;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   인쇄 스타일 (@media print)
+   ══════════════════════════════════════════════════════════════════ */
+@media print {
+  #chromemd-toolbar,
+  #chromemd-editor,
+  #chromemd-status,
+  #chromemd-toast {
+    display: none !important;
+  }
+
+  body#chromemd-root {
+    overflow: visible;
+  }
+
+  #chromemd-main {
+    overflow: visible;
+    display: block;
+  }
+
+  #chromemd-preview {
+    overflow: visible;
+    padding: 0;
+  }
+
+  .markdown-body {
+    font-size: 12pt;
+    color: #000000;
+  }
+
+  .markdown-body a {
+    color: #000000;
+    text-decoration: underline;
+  }
+
+  .markdown-body a[href]::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.85em;
+    color: #555555;
+  }
+
+  .markdown-body pre,
+  .markdown-body code {
+    border: 1px solid #cccccc;
+    background: #f5f5f5 !important;
+  }
+
+  .heading-anchor {
+    display: none !important;
+  }
+}
+

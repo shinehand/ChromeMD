@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChromeMD - Markdown Reader & Editor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "View and edit Markdown files in Chrome with GitHub-style rendering, syntax highlighting, and save support.",
   "icons": {
     "16": "icons/icon16.png",

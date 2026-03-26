@@ -1,6 +1,6 @@
 /**
  * ChromeMD - Markdown Reader & Editor
- * Content script: intercepts .md file requests and renders them with view/edit support.
+ * Content script: intercepts .md file requests and renders them with view/edit/save support.
  */
 
 (function () {
@@ -19,12 +19,21 @@
   let rawMarkdown = '';
   let currentMode = 'view'; // 'view' | 'edit' | 'split'
   let isDirty = false;
+  let previewScrollTop = 0; // 보기 모드 스크롤 위치 복원용
 
   /** ──────────────────────────────
    *  Bootstrap
    * ────────────────────────────── */
   rawMarkdown = readRawContent();
   buildUI(rawMarkdown);
+
+  // 미저장 변경 사항이 있을 때 페이지 이탈 경고
+  window.addEventListener('beforeunload', (e) => {
+    if (isDirty) {
+      e.preventDefault();
+      e.returnValue = '저장되지 않은 변경 사항이 있습니다. 페이지를 벗어나시겠습니까?';
+    }
+  });
 
   /** ──────────────────────────────
    *  URL helpers
@@ -60,23 +69,31 @@
   }
 
   /** ──────────────────────────────
+   *  Slugify (제목 앵커 ID 생성) — 한글 포함 유니코드 지원
+   * ────────────────────────────── */
+  function slugify(text) {
+    return text
+      .toLowerCase()
+      .replace(/\s+/g, '-')         // 공백 → 하이픈
+      .replace(/[<>"'&]/g, '')      // HTML 특수문자 제거
+      .replace(/-+/g, '-')          // 중복 하이픈 정리
+      .replace(/^-+|-+$/g, '')      // 앞뒤 하이픈 제거
+      || 'heading';
+  }
+
+  /** ──────────────────────────────
    *  Configure marked + highlight.js
    * ────────────────────────────── */
   function configureMarked() {
     if (typeof marked === 'undefined') return;
 
-    // Use marked v9+ API
-    marked.use({
-      breaks: false,
-      gfm: true,
-      pedantic: false,
-      highlight: null,
-    });
+    marked.use({ gfm: true, breaks: false, pedantic: false });
 
-    // Custom renderer for highlighted code blocks
     const renderer = new marked.Renderer();
+
+    // 코드 블록 — 구문 강조
     renderer.code = function (code, lang) {
-      // marked v9 passes an object for the first parameter
+      // marked v9+ passes a token object as first argument
       const codeStr = typeof code === 'object' ? code.text : code;
       const langStr = typeof code === 'object' ? code.lang : lang;
 
@@ -97,7 +114,51 @@
       return `<pre><code>${escaped}</code></pre>`;
     };
 
+    // 제목 — 앵커 링크 자동 생성
+    renderer.heading = function (tokenOrText, levelArg) {
+      const isToken = tokenOrText !== null && typeof tokenOrText === 'object';
+      const text  = isToken ? tokenOrText.text  : tokenOrText;
+      const level = isToken ? tokenOrText.depth : levelArg;
+      const raw   = isToken ? (tokenOrText.raw || text) : (arguments[2] || text);
+      const id    = slugify(raw.replace(/^#{1,6}\s+/, '').replace(/\s+$/, ''));
+      return `<h${level} id="${id}"><a class="heading-anchor" href="#${id}" aria-hidden="true">¶</a>${text}</h${level}>\n`;
+    };
+
     marked.use({ renderer });
+  }
+
+  /** ──────────────────────────────
+   *  HTML 새니타이저 (XSS 방지)
+   * ────────────────────────────── */
+  function sanitizeHtml(html) {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      // script 태그 제거
+      doc.querySelectorAll('script').forEach((el) => el.remove());
+      // 위험한 속성 제거
+      doc.querySelectorAll('*').forEach((el) => {
+        const toRemove = [];
+        for (let i = 0; i < el.attributes.length; i++) {
+          const { name, value } = el.attributes[i];
+          const v = value.trim().replace(/\s+/g, '').toLowerCase();
+          const isDangerousScheme =
+            v.startsWith('javascript:') ||
+            v.startsWith('vbscript:') ||
+            v.startsWith('data:');
+          if (
+            name.toLowerCase().startsWith('on') ||
+            (isDangerousScheme && ['href', 'src', 'action', 'formaction'].includes(name.toLowerCase()))
+          ) {
+            toRemove.push(name);
+          }
+        }
+        toRemove.forEach((n) => el.removeAttribute(n));
+      });
+      return doc.body.innerHTML;
+    } catch (e) {
+      return escapeHtml(html);
+    }
   }
 
   /** ──────────────────────────────
@@ -105,11 +166,10 @@
    * ────────────────────────────── */
   function renderMarkdown(md) {
     if (typeof marked === 'undefined') {
-      // Fallback: plain text
       return '<pre>' + escapeHtml(md) + '</pre>';
     }
     try {
-      return marked.parse(md);
+      return sanitizeHtml(marked.parse(md));
     } catch (e) {
       return '<pre>' + escapeHtml(md) + '</pre>';
     }
@@ -124,20 +184,51 @@
   }
 
   /** ──────────────────────────────
+   *  상태 표시줄 업데이트
+   * ────────────────────────────── */
+  function updateStatusBar() {
+    const wcEl     = document.getElementById('chromemd-status-wc');
+    const cursorEl = document.getElementById('chromemd-status-cursor');
+    if (!wcEl) return;
+
+    const words = rawMarkdown.trim() === '' ? 0 : rawMarkdown.trim().split(/\s+/).length;
+    const chars = rawMarkdown.length;
+    const lines = rawMarkdown.split('\n').length;
+    wcEl.textContent = `${lines}줄 · ${words}단어 · ${chars}글자`;
+
+    if (cursorEl) {
+      if (currentMode !== 'view') {
+        const textarea = document.getElementById('chromemd-textarea');
+        if (textarea) {
+          const before  = textarea.value.substring(0, textarea.selectionStart);
+          const bLines  = before.split('\n');
+          cursorEl.textContent = `줄 ${bLines.length}, 열 ${bLines[bLines.length - 1].length + 1}`;
+        }
+      } else {
+        cursorEl.textContent = '';
+      }
+    }
+  }
+
+  /** ──────────────────────────────
    *  Build the full UI
    * ────────────────────────────── */
   function buildUI(md) {
     configureMarked();
 
-    // Remove original page content
+    // 기존 페이지 내용 제거
     document.documentElement.innerHTML = '';
 
-    // Rebuild html/head/body cleanly
-    document.documentElement.lang = 'en';
+    // html/head/body 재구성
+    document.documentElement.lang = 'ko';
     const head = document.createElement('head');
     const meta = document.createElement('meta');
     meta.setAttribute('charset', 'utf-8');
     head.appendChild(meta);
+    const metaViewport = document.createElement('meta');
+    metaViewport.setAttribute('name', 'viewport');
+    metaViewport.setAttribute('content', 'width=device-width, initial-scale=1');
+    head.appendChild(metaViewport);
     const title = document.createElement('title');
     title.textContent = getFilename() + ' — ChromeMD';
     head.appendChild(title);
@@ -147,32 +238,32 @@
     body.id = 'chromemd-root';
     document.documentElement.appendChild(body);
 
-    // ── Toolbar ──────────────────────────────────────
+    // ── 툴바 ──────────────────────────────────────────
     const toolbar = document.createElement('div');
     toolbar.id = 'chromemd-toolbar';
     toolbar.innerHTML = `
       <div class="chromemd-toolbar-left">
         <span class="chromemd-icon">📄</span>
         <span class="chromemd-filename" title="${escapeHtml(url)}">${escapeHtml(getFilename())}</span>
-        <span class="chromemd-dirty" id="chromemd-dirty" style="display:none">●</span>
+        <span class="chromemd-dirty" id="chromemd-dirty" style="display:none" title="저장되지 않은 변경 사항">●</span>
       </div>
       <div class="chromemd-toolbar-center">
-        <button id="btn-view"   class="chromemd-btn chromemd-btn-active" title="View mode">View</button>
-        <button id="btn-split"  class="chromemd-btn" title="Split mode">Split</button>
-        <button id="btn-edit"   class="chromemd-btn" title="Edit mode">Edit</button>
+        <button id="btn-view"  class="chromemd-btn chromemd-btn-active" title="보기 모드 (Ctrl+E)">보기</button>
+        <button id="btn-split" class="chromemd-btn" title="분할 모드">분할</button>
+        <button id="btn-edit"  class="chromemd-btn" title="편집 모드 (Ctrl+E)">편집</button>
       </div>
       <div class="chromemd-toolbar-right">
-        <button id="btn-save"   class="chromemd-btn chromemd-btn-save" title="Download the (modified) Markdown file">💾 Save</button>
+        <button id="btn-save" class="chromemd-btn chromemd-btn-save" title="파일 저장 (Ctrl+S)">💾 저장</button>
       </div>
     `;
     body.appendChild(toolbar);
 
-    // ── Main content area ─────────────────────────────
+    // ── 메인 콘텐츠 영역 ────────────────────────────────
     const main = document.createElement('div');
     main.id = 'chromemd-main';
     body.appendChild(main);
 
-    // Preview pane
+    // 미리보기 패널
     const preview = document.createElement('div');
     preview.id = 'chromemd-preview';
     const article = document.createElement('article');
@@ -182,7 +273,7 @@
     preview.appendChild(article);
     main.appendChild(preview);
 
-    // Editor pane
+    // 편집기 패널
     const editor = document.createElement('div');
     editor.id = 'chromemd-editor';
     editor.style.display = 'none';
@@ -193,7 +284,16 @@
     editor.appendChild(textarea);
     main.appendChild(editor);
 
-    // ── Event wiring ──────────────────────────────────
+    // ── 상태 표시줄 ─────────────────────────────────────
+    const statusBar = document.createElement('div');
+    statusBar.id = 'chromemd-status';
+    statusBar.innerHTML = `
+      <span id="chromemd-status-cursor"></span>
+      <span id="chromemd-status-wc"></span>
+    `;
+    body.appendChild(statusBar);
+
+    // ── 이벤트 연결 ─────────────────────────────────────
     document.getElementById('btn-view').addEventListener('click', () => setMode('view'));
     document.getElementById('btn-split').addEventListener('click', () => setMode('split'));
     document.getElementById('btn-edit').addEventListener('click', () => setMode('edit'));
@@ -205,26 +305,32 @@
       if (currentMode === 'split') {
         article.innerHTML = renderMarkdown(rawMarkdown);
       }
+      updateStatusBar();
     });
 
-    // Handle Tab key in textarea (insert 2 spaces instead of focus change)
+    // Tab 키 → 공백 2칸 삽입
     textarea.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') {
         e.preventDefault();
         const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const value = textarea.value;
-        textarea.value = value.substring(0, start) + '  ' + value.substring(end);
+        const end   = textarea.selectionEnd;
+        textarea.value =
+          textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
         textarea.selectionStart = textarea.selectionEnd = start + 2;
         rawMarkdown = textarea.value;
         markDirty(true);
         if (currentMode === 'split') {
           article.innerHTML = renderMarkdown(rawMarkdown);
         }
+        updateStatusBar();
       }
     });
 
-    // Keyboard shortcuts
+    // 커서 위치 추적 (상태 표시줄 업데이트)
+    textarea.addEventListener('keyup',   updateStatusBar);
+    textarea.addEventListener('mouseup', updateStatusBar);
+
+    // 전역 단축키
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
@@ -235,17 +341,26 @@
         setMode(currentMode === 'view' ? 'edit' : 'view');
       }
     });
+
+    updateStatusBar();
   }
 
   /** ──────────────────────────────
-   *  Switch view mode
+   *  모드 전환
    * ────────────────────────────── */
   function setMode(mode) {
+    const preview  = document.getElementById('chromemd-preview');
+    const editor   = document.getElementById('chromemd-editor');
+    const article  = document.getElementById('chromemd-article');
+    const main     = document.getElementById('chromemd-main');
+    const textarea = document.getElementById('chromemd-textarea');
+
+    // 보기 모드에서 이탈 전 스크롤 위치 저장
+    if (currentMode === 'view' && preview) {
+      previewScrollTop = preview.scrollTop;
+    }
+
     currentMode = mode;
-    const preview = document.getElementById('chromemd-preview');
-    const editor = document.getElementById('chromemd-editor');
-    const article = document.getElementById('chromemd-article');
-    const main = document.getElementById('chromemd-main');
 
     document.getElementById('btn-view').classList.toggle('chromemd-btn-active', mode === 'view');
     document.getElementById('btn-split').classList.toggle('chromemd-btn-active', mode === 'split');
@@ -254,24 +369,28 @@
     if (mode === 'view') {
       article.innerHTML = renderMarkdown(rawMarkdown);
       preview.style.display = '';
-      editor.style.display = 'none';
+      editor.style.display  = 'none';
       main.classList.remove('chromemd-split');
+      // 스크롤 위치 복원
+      requestAnimationFrame(() => { preview.scrollTop = previewScrollTop; });
     } else if (mode === 'edit') {
       preview.style.display = 'none';
-      editor.style.display = '';
+      editor.style.display  = '';
       main.classList.remove('chromemd-split');
-      document.getElementById('chromemd-textarea').focus();
+      textarea.focus();
     } else if (mode === 'split') {
       article.innerHTML = renderMarkdown(rawMarkdown);
       preview.style.display = '';
-      editor.style.display = '';
+      editor.style.display  = '';
       main.classList.add('chromemd-split');
-      document.getElementById('chromemd-textarea').focus();
+      textarea.focus();
     }
+
+    updateStatusBar();
   }
 
   /** ──────────────────────────────
-   *  Dirty state
+   *  미저장 상태 표시
    * ────────────────────────────── */
   function markDirty(dirty) {
     isDirty = dirty;
@@ -280,31 +399,29 @@
   }
 
   /** ──────────────────────────────
-   *  Save / Download
+   *  저장 / 다운로드
    * ────────────────────────────── */
   function saveFile() {
-    const content = rawMarkdown;
-    const filename = getFilename();
-    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const filename  = getFilename();
+    const blob      = new Blob([rawMarkdown], { type: 'text/markdown;charset=utf-8' });
     const objectUrl = URL.createObjectURL(blob);
 
     const a = document.createElement('a');
-    a.href = objectUrl;
+    a.href     = objectUrl;
     a.download = filename;
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
 
-    // Revoke after a short delay
     setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
 
     markDirty(false);
-    showToast('💾 Saved: ' + filename);
+    showToast('💾 저장됨: ' + filename);
   }
 
   /** ──────────────────────────────
-   *  Toast notification
+   *  토스트 알림
    * ────────────────────────────── */
   function showToast(message) {
     let toast = document.getElementById('chromemd-toast');
