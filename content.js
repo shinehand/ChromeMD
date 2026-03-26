@@ -22,6 +22,7 @@
   let previewScrollTop = 0; // 보기 모드 스크롤 위치 복원용
   let sidebarMode = null;   // null | 'toc' | 'files'
   let tocObserver = null;   // IntersectionObserver for TOC active-heading tracking
+  let syncingScroll = false; // 분할 모드 스크롤 동기화 플래그
   const copyTimers = new WeakMap(); // timers for copy-button feedback reset
 
   /** ──────────────────────────────
@@ -312,12 +313,36 @@
     editor.appendChild(textarea);
     main.appendChild(editor);
 
-    // 읽기 진행 표시줄 스크롤 업데이트
+    // 읽기 진행 표시줄 스크롤 업데이트 + 분할 모드 스크롤 동기화
     preview.addEventListener('scroll', () => {
       const bar = document.getElementById('chromemd-progress');
       if (bar) {
         const scrollable = preview.scrollHeight - preview.clientHeight;
         bar.style.width = (scrollable > 0 ? preview.scrollTop / scrollable * 100 : 100) + '%';
+      }
+      if (currentMode === 'split' && !syncingScroll) {
+        syncingScroll = true;
+        const scrollable = preview.scrollHeight - preview.clientHeight;
+        if (scrollable > 0) {
+          const ratio = preview.scrollTop / scrollable;
+          const ta = document.getElementById('chromemd-textarea');
+          if (ta) ta.scrollTop = ratio * Math.max(0, ta.scrollHeight - ta.clientHeight);
+        }
+        requestAnimationFrame(() => { syncingScroll = false; });
+      }
+    });
+
+    // 분할 모드: 편집기 스크롤 → 미리보기 동기화
+    textarea.addEventListener('scroll', () => {
+      if (currentMode === 'split' && !syncingScroll) {
+        syncingScroll = true;
+        const scrollable = textarea.scrollHeight - textarea.clientHeight;
+        if (scrollable > 0) {
+          const ratio = textarea.scrollTop / scrollable;
+          const pv = document.getElementById('chromemd-preview');
+          if (pv) pv.scrollTop = ratio * Math.max(0, pv.scrollHeight - pv.clientHeight);
+        }
+        requestAnimationFrame(() => { syncingScroll = false; });
       }
     });
 
@@ -385,6 +410,9 @@
     });
 
     updateStatusBar();
+
+    // 목차를 기본으로 열기
+    toggleSidebar('toc');
   }
 
   /** ──────────────────────────────
@@ -530,8 +558,10 @@
   async function loadAndRenderDir(container, dirUrl, currentFileUrl) {
     try {
       const res = await fetch(dirUrl);
-      if (!res.ok) throw new Error('not ok');
+      // file:// URL 응답은 status=0 으로 오므로 res.ok 가 false 여도 내용을 읽는다.
+      if (!res.ok && res.status !== 0) throw new Error('HTTP ' + res.status);
       const html   = await res.text();
+      if (!html) throw new Error('empty response');
       const parser = new DOMParser();
       const doc    = parser.parseFromString(html, 'text/html');
       const entries = [];
