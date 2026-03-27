@@ -24,6 +24,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .catch(err => sendResponse({ error: err.message }));
     return true; // keep the message channel open for the async response
   }
+  if (msg.type === 'openInNewWindow') {
+    chrome.windows.create({ url: msg.url, type: 'popup' });
+  }
 });
 
 const DIRECTORY_LOAD_TIMEOUT_MS = 10000;

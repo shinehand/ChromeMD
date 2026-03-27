@@ -11,7 +11,8 @@
   "permissions": [
     "downloads",
     "tabs",
-    "scripting"
+    "scripting",
+    "windows"
   ],
   "host_permissions": [
     "file:///*"
