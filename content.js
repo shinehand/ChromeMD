@@ -28,16 +28,34 @@
   /** ──────────────────────────────
    *  Bootstrap
    * ────────────────────────────── */
-  rawMarkdown = readRawContent();
-  buildUI(rawMarkdown);
-
-  // 미저장 변경 사항이 있을 때 페이지 이탈 경고
-  window.addEventListener('beforeunload', (e) => {
-    if (isDirty) {
-      e.preventDefault();
-      e.returnValue = '저장되지 않은 변경 사항이 있습니다. 페이지를 벗어나시겠습니까?';
+  (async () => {
+    // 로컬 파일인 경우 자동 팝업 설정 확인
+    if (url.startsWith('file://')) {
+      try {
+        const settings = await new Promise(resolve =>
+          chrome.storage.sync.get({ autoPopup: false }, resolve)
+        );
+        if (settings.autoPopup) {
+          const resp = await new Promise(resolve =>
+            chrome.runtime.sendMessage({ type: 'autoPopup', url }, resolve)
+          );
+          // 이미 팝업이 아니면 background가 새 팝업을 열고 이 탭을 닫음
+          if (resp && resp.alreadyPopup === false) return;
+        }
+      } catch (_) { /* 설정 확인 실패 시 일반 모드로 진행 */ }
     }
-  });
+
+    rawMarkdown = readRawContent();
+    buildUI(rawMarkdown);
+
+    // 미저장 변경 사항이 있을 때 페이지 이탈 경고
+    window.addEventListener('beforeunload', (e) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '저장되지 않은 변경 사항이 있습니다. 페이지를 벗어나시겠습니까?';
+      }
+    });
+  })();
 
   /** ──────────────────────────────
    *  URL helpers
@@ -263,6 +281,7 @@
         </div>
       </div>
       <div class="chromemd-toolbar-right">
+        <button id="btn-new-window" class="chromemd-btn chromemd-btn-icon" title="새 창으로 열기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1h7a.5.5 0 01.5.5v2h1v-2A1.5 1.5 0 008.5 0h-7A1.5 1.5 0 000 1.5v9A1.5 1.5 0 001.5 12H4v-1H1.5a.5.5 0 01-.5-.5v-9a.5.5 0 01.5-.5z"/><path d="M6.5 4h7A1.5 1.5 0 0115 5.5v9a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 015 14.5v-9A1.5 1.5 0 016.5 4zm0 1a.5.5 0 00-.5.5v9a.5.5 0 00.5.5h7a.5.5 0 00.5-.5v-9a.5.5 0 00-.5-.5h-7z"/></svg></button>
         <button id="btn-print" class="chromemd-btn chromemd-btn-icon" title="인쇄 (Ctrl+P)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 1a2 2 0 00-2 2v1h10V3a2 2 0 00-2-2H5zm6 8H5a1 1 0 00-1 1v3h8v-3a1 1 0 00-1-1z"/><path d="M0 7a2 2 0 012-2h12a2 2 0 012 2v3a2 2 0 01-2 2h-1v-2a2 2 0 00-2-2H5a2 2 0 00-2 2v2H2a2 2 0 01-2-2V7zm2.5 1a.5.5 0 100-1 .5.5 0 000 1z"/></svg></button>
         <button id="btn-save" class="chromemd-btn chromemd-btn-save" title="파일 저장 (Ctrl+S)">💾 저장</button>
       </div>
@@ -363,6 +382,9 @@
     document.getElementById('btn-sidebar-files').addEventListener('click', () => toggleSidebar('files'));
     document.getElementById('btn-sidebar-toc').addEventListener('click', () => toggleSidebar('toc'));
     document.getElementById('btn-print').addEventListener('click', () => window.print());
+    document.getElementById('btn-new-window').addEventListener('click', () => {
+      chrome.runtime.sendMessage({ type: 'openInNewWindow', url });
+    });
 
     textarea.addEventListener('input', () => {
       rawMarkdown = textarea.value;
@@ -646,7 +668,7 @@
         const expandDir = async () => {
           open = !open;
           toggle.textContent = open ? '▼' : '▶';
-          sub.style.display = open ? '' : 'none';
+          sub.style.display = open ? 'block' : 'none';
           if (open && !sub.dataset.loaded) {
             sub.dataset.loaded = '1';
             sub.innerHTML = '<p class="chromemd-sidebar-loading">불러오는 중…</p>';
