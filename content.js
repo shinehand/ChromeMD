@@ -768,8 +768,6 @@
       editor.style.display  = 'none';
       main.classList.remove('chromemd-split');
       document.getElementById('chromemd-progress')?.classList.add('chromemd-progress-visible');
-      // DOM 재렌더링 후 레이아웃이 확정된 다음 프레임에 스크롤 복원
-      requestAnimationFrame(() => { preview.scrollTop = previewScrollTop; });
     } else if (mode === 'edit') {
       preview.style.display = 'none';
       editor.style.display  = '';
@@ -783,9 +781,12 @@
       editor.style.display  = '';
       main.classList.add('chromemd-split');
       document.getElementById('chromemd-progress')?.classList.add('chromemd-progress-visible');
-      // DOM 재렌더링 후 레이아웃이 확정된 다음 프레임에 스크롤 복원
-      requestAnimationFrame(() => { preview.scrollTop = previewScrollTop; });
       textarea.focus();
+    }
+
+    // DOM 재렌더링 후 레이아웃이 확정된 다음 프레임에 미리보기 스크롤 복원
+    if ((mode === 'view' || mode === 'split') && preview) {
+      requestAnimationFrame(() => { preview.scrollTop = previewScrollTop; });
     }
 
     if (sidebarMode === 'toc') buildTOC();

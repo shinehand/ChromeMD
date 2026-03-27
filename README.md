@@ -1,74 +1,77 @@
-# ChromeMD — Markdown Reader & Editor
+# ChromeMD — 마크다운 뷰어 & 편집기
 
-A Chrome extension that lets you **view** and **edit** Markdown (`.md`) files directly in the browser with GitHub-style rendering, syntax highlighting, and a one-click save (download) feature.
+Chrome 브라우저에서 마크다운(`.md`) 파일을 **바로 열람하고 편집**할 수 있는 확장 프로그램입니다.  
+GitHub 스타일 렌더링, 구문 강조, 한 번의 클릭으로 저장(다운로드)하는 기능을 제공합니다.
 
-## Features
+## 주요 기능
 
-| Feature | Description |
-|---------|-------------|
-| 📄 **View Mode** | Renders Markdown as beautiful GitHub-style HTML |
-| ✏️ **Edit Mode** | Full-screen textarea editor for the raw Markdown source |
-| 🔀 **Split Mode** | Side-by-side editor and live preview |
-| 💾 **Save** | Downloads the (modified) file back to disk (`Ctrl/Cmd+S`) |
-| 🎨 **Syntax Highlighting** | Code blocks highlighted via highlight.js (GitHub theme) |
-| ⌨️ **Keyboard Shortcuts** | `Ctrl+E` / `Cmd+E` toggles edit mode; `Ctrl+S` / `Cmd+S` saves |
+| 기능 | 설명 |
+|------|------|
+| 📄 **보기 모드** | 마크다운을 GitHub 스타일 HTML로 렌더링 |
+| ✏️ **편집 모드** | 마크다운 원문을 전체 화면 편집기로 수정 |
+| 🔀 **분할 모드** | 편집기와 미리보기를 좌우로 나란히 표시 |
+| 💾 **저장** | 수정한 파일을 로컬 디스크에 다운로드 (`Ctrl/Cmd+S`) |
+| 🎨 **구문 강조** | highlight.js(GitHub 테마)로 코드 블록 색상 처리 |
+| 📑 **목차(TOC)** | 문서 제목을 자동으로 추출해 사이드바에 목차 표시 |
+| 📁 **파일 탐색기** | 로컬 파일(`file://`)의 같은 폴더 파일 목록 탐색 |
+| ⌨️ **단축키** | `Ctrl+E` / `Cmd+E` 편집 모드 전환 · `Ctrl+S` / `Cmd+S` 저장 |
 
-## Supported file extensions
+## 지원 파일 확장자
 
 `.md` · `.markdown` · `.mdown` · `.mkd` · `.mkdn` · `.mdwn` · `.mdtxt` · `.mdtext`
 
-Works on both **local files** (`file://`) and **remote URLs** (`http://` / `https://`).
+**로컬 파일**(`file://`)과 **원격 URL**(`http://` / `https://`) 모두 지원합니다.
 
-## Installation
+## 설치 방법
 
-### Development / Unpacked
+### 개발자 모드(압축 해제) 설치
 
-1. Clone or download this repository.
-2. Open Chrome and navigate to `chrome://extensions/`.
-3. Enable **Developer mode** (toggle in the top-right corner).
-4. Click **Load unpacked** and select the root folder of this repository.
-5. ✅ The extension is now installed.
+1. 이 저장소를 클론하거나 ZIP으로 다운로드합니다.
+2. Chrome에서 `chrome://extensions/` 페이지를 엽니다.
+3. 오른쪽 상단의 **개발자 모드** 토글을 활성화합니다.
+4. **압축 해제된 확장 프로그램 로드**를 클릭하고 저장소 루트 폴더를 선택합니다.
+5. ✅ 확장 프로그램 설치 완료.
 
-### Allow access to local files (important!)
+### 로컬 파일 접근 허용 (중요!)
 
-To view local `.md` files (`file://` URLs) you must enable file access:
+`file://` 경로의 마크다운 파일을 보려면 파일 접근 권한을 추가로 허용해야 합니다.
 
-1. Go to `chrome://extensions/`.
-2. Find **ChromeMD** and click **Details**.
-3. Enable **Allow access to file URLs**.
+1. `chrome://extensions/` 페이지로 이동합니다.
+2. **ChromeMD** 항목에서 **세부정보**를 클릭합니다.
+3. **파일 URL에 대한 액세스 허용**을 활성화합니다.
 
-## Usage
+## 사용 방법
 
-1. Open any `.md` file in Chrome (drag-and-drop onto a tab, or use `File → Open File`).
-2. ChromeMD intercepts the request and renders it instantly.
-3. Use the toolbar buttons to switch between **View**, **Split**, and **Edit** modes.
-4. Make your changes in the editor.
-5. Press `Ctrl+S` (or click **💾 Save**) to download the updated file.
+1. Chrome에서 `.md` 파일을 엽니다 (탭으로 드래그&드롭하거나 `파일 → 열기` 사용).
+2. ChromeMD가 자동으로 요청을 가로채어 즉시 렌더링합니다.
+3. 툴바의 **보기 / 분할 / 편집** 버튼으로 모드를 전환합니다.
+4. 편집 모드에서 내용을 수정합니다.
+5. `Ctrl+S` 또는 **💾 저장** 버튼을 눌러 수정된 파일을 다운로드합니다.
 
-## Project structure
+## 프로젝트 구조
 
 ```
 ChromeMD/
-├── manifest.json           # Chrome Extension Manifest V3
-├── content.js              # Content script – view/edit/save logic
-├── styles.css              # Toolbar & GitHub-style markdown CSS
+├── manifest.json           # Chrome 확장 Manifest V3 설정
+├── content.js              # 콘텐츠 스크립트 — 보기/편집/저장 로직
+├── styles.css              # 툴바 및 GitHub 스타일 마크다운 CSS
 ├── lib/
-│   ├── marked.min.js       # Markdown parser (marked v9)
-│   ├── highlight.min.js    # Syntax highlighter (highlight.js v11)
-│   └── highlight-github.min.css  # GitHub syntax-highlight theme
+│   ├── marked.min.js       # 마크다운 파서 (marked v9)
+│   ├── highlight.min.js    # 구문 강조 라이브러리 (highlight.js v11)
+│   └── highlight-github.min.css  # GitHub 구문 강조 테마
 └── icons/
     ├── icon16.png
     ├── icon48.png
     └── icon128.png
 ```
 
-## Libraries used
+## 사용 라이브러리
 
-| Library | Version | License |
-|---------|---------|---------|
+| 라이브러리 | 버전 | 라이선스 |
+|-----------|------|---------|
 | [marked](https://github.com/markedjs/marked) | 9.x | MIT |
 | [highlight.js](https://github.com/highlightjs/highlight.js) | 11.x | BSD-3-Clause |
 
-## License
+## 라이선스
 
 MIT
