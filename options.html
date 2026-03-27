@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChromeMD 설정</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      color: #24292f;
+      background: #f6f8fa;
+      margin: 0;
+      padding: 32px;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0 0 24px;
+      color: #1f2328;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 16px 20px;
+      max-width: 560px;
+    }
+    .option-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 0;
+    }
+    .option-row + .option-row {
+      border-top: 1px solid #eaeef2;
+    }
+    .option-row input[type="checkbox"] {
+      margin-top: 2px;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      flex-shrink: 0;
+      accent-color: #0969da;
+    }
+    .option-label {
+      flex: 1;
+      cursor: pointer;
+    }
+    .option-label strong {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .option-label span {
+      color: #57606a;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #status {
+      margin-top: 16px;
+      font-size: 12px;
+      color: #57606a;
+      min-height: 18px;
+    }
+    #status.saved {
+      color: #1a7f37;
+    }
+  </style>
+</head>
+<body>
+  <h1>ChromeMD 설정</h1>
+  <div class="card">
+    <div class="option-row">
+      <input type="checkbox" id="autoPopup" />
+      <label class="option-label" for="autoPopup">
+        <strong>md 파일을 새 팝업 창으로 자동 열기</strong>
+        <span>
+          로컬 md 파일을 더블 클릭하거나 Chrome에서 열면,
+          기존 Chrome 창과 독립된 별도 팝업 창에서 표시합니다.
+        </span>
+      </label>
+    </div>
+  </div>
+  <div id="status"></div>
+  <script src="options.js"></script>
+</body>
+</html>

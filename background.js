@@ -17,7 +17,7 @@
  * temporary tab, and return the href list to the content script.
  */
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'getDirectoryListing') {
     getDirectoryListing(msg.url)
       .then(hrefs => sendResponse({ hrefs }))
@@ -25,7 +25,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true; // keep the message channel open for the async response
   }
   if (msg.type === 'openInNewWindow') {
-    chrome.windows.create({ url: msg.url, type: 'popup' });
+    if (typeof msg.url === 'string' && msg.url.startsWith('file://')) {
+      chrome.windows.create({ url: msg.url, type: 'popup' });
+    }
+  }
+  if (msg.type === 'autoPopup') {
+    if (typeof msg.url !== 'string' || !msg.url.startsWith('file://')) {
+      sendResponse({ alreadyPopup: true }); // treat invalid URL as no-op
+      return false;
+    }
+    chrome.windows.get(sender.tab.windowId, (win) => {
+      if (chrome.runtime.lastError || !win) {
+        sendResponse({ alreadyPopup: true }); // can't determine type; proceed normally
+        return;
+      }
+      if (win.type === 'popup') {
+        sendResponse({ alreadyPopup: true });
+      } else {
+        chrome.windows.create({ url: msg.url, type: 'popup' });
+        chrome.tabs.remove(sender.tab.id);
+        sendResponse({ alreadyPopup: false });
+      }
+    });
+    return true; // keep the message channel open for the async response
   }
 });
 

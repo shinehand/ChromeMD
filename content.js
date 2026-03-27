@@ -28,16 +28,34 @@
   /** ──────────────────────────────
    *  Bootstrap
    * ────────────────────────────── */
-  rawMarkdown = readRawContent();
-  buildUI(rawMarkdown);
-
-  // 미저장 변경 사항이 있을 때 페이지 이탈 경고
-  window.addEventListener('beforeunload', (e) => {
-    if (isDirty) {
-      e.preventDefault();
-      e.returnValue = '저장되지 않은 변경 사항이 있습니다. 페이지를 벗어나시겠습니까?';
+  (async () => {
+    // 로컬 파일인 경우 자동 팝업 설정 확인
+    if (url.startsWith('file://')) {
+      try {
+        const settings = await new Promise(resolve =>
+          chrome.storage.sync.get({ autoPopup: false }, resolve)
+        );
+        if (settings.autoPopup) {
+          const resp = await new Promise(resolve =>
+            chrome.runtime.sendMessage({ type: 'autoPopup', url }, resolve)
+          );
+          // 이미 팝업이 아니면 background가 새 팝업을 열고 이 탭을 닫음
+          if (resp && resp.alreadyPopup === false) return;
+        }
+      } catch (_) { /* 설정 확인 실패 시 일반 모드로 진행 */ }
     }
-  });
+
+    rawMarkdown = readRawContent();
+    buildUI(rawMarkdown);
+
+    // 미저장 변경 사항이 있을 때 페이지 이탈 경고
+    window.addEventListener('beforeunload', (e) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '저장되지 않은 변경 사항이 있습니다. 페이지를 벗어나시겠습니까?';
+      }
+    });
+  })();
 
   /** ──────────────────────────────
    *  URL helpers
