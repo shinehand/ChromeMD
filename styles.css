@@ -276,7 +276,12 @@ body#chromemd-root {
 
 @media (min-width: 960px) {
   #chromemd-preview {
-    padding: 40px calc(50% - 400px);
+    padding: 40px;
+  }
+
+  #chromemd-article {
+    max-width: 800px;
+    margin: 0 auto;
   }
 }
 
@@ -314,6 +319,12 @@ body#chromemd-root {
 #chromemd-main.chromemd-split #chromemd-preview {
   padding: 24px;
   border-right: 1px solid var(--color-border);
+}
+
+/* In split mode, the article uses the full pane width (no centering) */
+#chromemd-main.chromemd-split #chromemd-article {
+  max-width: none;
+  margin: 0;
 }
 
 #chromemd-main.chromemd-split #chromemd-editor {

@@ -557,10 +557,20 @@
 
   async function loadAndRenderDir(container, dirUrl, currentFileUrl) {
     try {
-      const res = await fetch(dirUrl);
-      // file:// URL 응답은 status=0 으로 오므로 res.ok 가 false 여도 내용을 읽는다.
-      if (!res.ok && res.status !== 0) throw new Error('HTTP ' + res.status);
-      const html   = await res.text();
+      const html = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', dirUrl, true);
+        xhr.onload = () => {
+          // file:// URL responses use status 0; treat 0 and 200 as success
+          if (xhr.status === 0 || xhr.status === 200) {
+            resolve(xhr.responseText || '');
+          } else {
+            reject(new Error('HTTP ' + xhr.status));
+          }
+        };
+        xhr.onerror = () => reject(new Error('network error'));
+        xhr.send();
+      });
       if (!html) throw new Error('empty response');
       const parser = new DOMParser();
       const doc    = parser.parseFromString(html, 'text/html');
@@ -570,6 +580,9 @@
         const href = a.getAttribute('href');
         if (!href || href === '../' || href.startsWith('..') ||
             href.startsWith('?') || href.startsWith('#')) continue;
+        // Skip non-file hrefs (e.g. full http URLs, chrome-internal links)
+        if (href.startsWith('http://') || href.startsWith('https://') ||
+            href.startsWith('chrome://')) continue;
         const isDir = href.endsWith('/');
         const name  = decodeURIComponent(href.replace(/\/$/, '').split('/').pop());
         if (!name || name.startsWith('.')) continue;
@@ -737,8 +750,8 @@
     const main     = document.getElementById('chromemd-main');
     const textarea = document.getElementById('chromemd-textarea');
 
-    // 보기 모드에서 이탈 전 스크롤 위치 저장
-    if (currentMode === 'view' && preview) {
+    // 미리 보기가 표시된 모드에서 이탈 전 스크롤 위치 저장
+    if ((currentMode === 'view' || currentMode === 'split') && preview) {
       previewScrollTop = preview.scrollTop;
     }
 
@@ -755,8 +768,6 @@
       editor.style.display  = 'none';
       main.classList.remove('chromemd-split');
       document.getElementById('chromemd-progress')?.classList.add('chromemd-progress-visible');
-      // 스크롤 위치 복원
-      requestAnimationFrame(() => { preview.scrollTop = previewScrollTop; });
     } else if (mode === 'edit') {
       preview.style.display = 'none';
       editor.style.display  = '';
@@ -771,6 +782,11 @@
       main.classList.add('chromemd-split');
       document.getElementById('chromemd-progress')?.classList.add('chromemd-progress-visible');
       textarea.focus();
+    }
+
+    // DOM 재렌더링 후 레이아웃이 확정된 다음 프레임에 미리보기 스크롤 복원
+    if ((mode === 'view' || mode === 'split') && preview) {
+      requestAnimationFrame(() => { preview.scrollTop = previewScrollTop; });
     }
 
     if (sidebarMode === 'toc') buildTOC();
