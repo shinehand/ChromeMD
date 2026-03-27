@@ -557,32 +557,31 @@
 
   async function loadAndRenderDir(container, dirUrl, currentFileUrl) {
     try {
-      const html = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('GET', dirUrl, true);
-        xhr.onload = () => {
-          // file:// URL responses use status 0; treat 0 and 200 as success
-          if (xhr.status === 0 || xhr.status === 200) {
-            resolve(xhr.responseText || '');
+      // Chrome blocks file://→file:// XHR in content scripts (unique null
+      // origins since Chrome 83+) and does not serve directory listing HTML
+      // for fetch/XHR requests (only for real navigations).
+      // Delegate to the background service worker which opens a temporary
+      // inactive tab (a real navigation) and extracts the <a href> links.
+      const hrefs = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({ type: 'getDirectoryListing', url: dirUrl }, response => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else if (response && response.hrefs) {
+            resolve(response.hrefs);
           } else {
-            reject(new Error('HTTP ' + xhr.status));
+            reject(new Error(response?.error || 'Unknown error'));
           }
-        };
-        xhr.onerror = () => reject(new Error('network error'));
-        xhr.send();
+        });
       });
-      if (!html) throw new Error('empty response');
-      const parser = new DOMParser();
-      const doc    = parser.parseFromString(html, 'text/html');
-      const entries = [];
 
-      for (const a of doc.querySelectorAll('a[href]')) {
-        const href = a.getAttribute('href');
+      const entries = [];
+      for (const href of hrefs) {
         if (!href || href === '../' || href.startsWith('..') ||
             href.startsWith('?') || href.startsWith('#')) continue;
         // Skip non-file hrefs (e.g. full http URLs, chrome-internal links)
         if (href.startsWith('http://') || href.startsWith('https://') ||
-            href.startsWith('chrome://')) continue;
+            href.startsWith('chrome://') || href.startsWith('javascript:') ||
+            href.startsWith('vbscript:') || href.startsWith('data:')) continue;
         const isDir = href.endsWith('/');
         const name  = decodeURIComponent(href.replace(/\/$/, '').split('/').pop());
         if (!name || name.startsWith('.')) continue;
