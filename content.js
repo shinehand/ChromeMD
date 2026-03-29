@@ -23,7 +23,14 @@
   let sidebarMode = null;   // null | 'toc' | 'files'
   let tocObserver = null;   // IntersectionObserver for TOC active-heading tracking
   let syncingScroll = false; // 분할 모드 스크롤 동기화 플래그
+  let currentFileHandle = null; // File System Access API handle for direct-save
   const copyTimers = new WeakMap(); // timers for copy-button feedback reset
+  const showDirectSave = false;
+  const testFsConfig = getTestFsConfig();
+  const supportsFileSystemAccess =
+    Boolean(testFsConfig) ||
+    typeof window.showOpenFilePicker === 'function' &&
+    typeof window.showSaveFilePicker === 'function';
 
   /** ──────────────────────────────
    *  Bootstrap
@@ -47,6 +54,8 @@
 
     rawMarkdown = readRawContent();
     buildUI(rawMarkdown);
+    await restoreCurrentFileHandle();
+    updateSaveButtons();
 
     // 미저장 변경 사항이 있을 때 페이지 이탈 경고
     window.addEventListener('beforeunload', (e) => {
@@ -76,6 +85,266 @@
     } catch (e) {
       return 'document.md';
     }
+  }
+
+  function getTestFsConfig() {
+    const root = document.documentElement;
+    if (!root || !root.dataset) return null;
+
+    const currentFile = root.dataset.chromemdTestCurrentFile || '';
+    const saveAsFile = root.dataset.chromemdTestSaveAsFile || '';
+    if (!currentFile && !saveAsFile) return null;
+
+    return { currentFile, saveAsFile };
+  }
+
+  function canDirectSaveToCurrentFile() {
+    return url.startsWith('file://') || Boolean(testFsConfig?.currentFile);
+  }
+
+  function getMarkdownPickerTypes() {
+    return [
+      {
+        description: 'Markdown files',
+        accept: {
+          'text/markdown': ['.md', '.markdown', '.mdown', '.mkd', '.mkdn', '.mdwn', '.mdtxt', '.mdtext'],
+          'text/plain': ['.text']
+        }
+      }
+    ];
+  }
+
+  function isAbortError(error) {
+    return error && (error.name === 'AbortError' || error.message === 'The user aborted a request.');
+  }
+
+  function getHandleStorageKey() {
+    return url;
+  }
+
+  async function requestHandleStore(type, extra = {}) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type, ...extra }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (response && response.error) {
+          reject(new Error(response.error));
+          return;
+        }
+        resolve(response || {});
+      });
+    });
+  }
+
+  async function requestNativeHost(payload) {
+    if (testFsConfig) return null;
+
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: 'nativeHostRequest', payload }, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+        if (!response) {
+          resolve({ ok: false, error: 'native host unavailable' });
+          return;
+        }
+        if (response.error) {
+          resolve({ ok: false, error: response.error });
+          return;
+        }
+        resolve(response.result || { ok: false, error: 'native host unavailable' });
+      });
+    });
+  }
+
+  function getLocalFilePath() {
+    if (!url.startsWith('file://')) return null;
+    try {
+      const fileUrl = new URL(url);
+      return decodeURIComponent(fileUrl.pathname);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function saveViaNativeHost() {
+    const filePath = getLocalFilePath();
+    if (!filePath) return { ok: false, error: 'current page is not a local file' };
+
+    const response = await requestNativeHost({
+      type: 'writeFile',
+      path: filePath,
+      text: rawMarkdown
+    });
+
+    return response || { ok: false, error: 'native host unavailable' };
+  }
+
+  function createTestFileHandle(targetPath) {
+    if (!targetPath) return null;
+
+    return {
+      kind: 'file',
+      name: decodeURIComponent(targetPath.split('/').pop() || 'document.md'),
+      __targetPath: targetPath,
+      async queryPermission() {
+        return 'granted';
+      },
+      async requestPermission() {
+        return 'granted';
+      },
+      async isSameEntry(other) {
+        return Boolean(other && other.__targetPath === targetPath);
+      },
+      async createWritable() {
+        let buffer = '';
+        return {
+          async write(text) {
+            buffer = typeof text === 'string' ? text : String(text);
+          },
+          async close() {
+            await dispatchTestWrite(targetPath, buffer);
+          }
+        };
+      }
+    };
+  }
+
+  async function dispatchTestWrite(targetPath, text) {
+    const requestId = 'chromemd-test-' + Math.random().toString(36).slice(2);
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        window.removeEventListener('chromemd-test-write-done', onDone);
+        reject(new Error('timed out waiting for test write bridge'));
+      }, 5000);
+
+      function onDone(event) {
+        const detail = event.detail || {};
+        if (detail.requestId !== requestId) return;
+        clearTimeout(timer);
+        window.removeEventListener('chromemd-test-write-done', onDone);
+        if (detail.error) reject(new Error(detail.error));
+        else resolve();
+      }
+
+      window.addEventListener('chromemd-test-write-done', onDone);
+      window.dispatchEvent(new CustomEvent('chromemd-test-write', {
+        detail: {
+          requestId,
+          targetPath,
+          text
+        }
+      }));
+    });
+  }
+
+  async function getStoredFileHandle() {
+    if (!supportsFileSystemAccess) return null;
+    const response = await requestHandleStore('getStoredFileHandle', {
+      key: getHandleStorageKey()
+    });
+    return response.handle || null;
+  }
+
+  async function setStoredFileHandle(handle) {
+    if (!supportsFileSystemAccess) return;
+    await requestHandleStore('setStoredFileHandle', {
+      key: getHandleStorageKey(),
+      handle
+    });
+  }
+
+  async function clearStoredFileHandle() {
+    if (!supportsFileSystemAccess) return;
+    await requestHandleStore('clearStoredFileHandle', {
+      key: getHandleStorageKey()
+    });
+  }
+
+  async function queryHandlePermission(handle) {
+    if (!handle || typeof handle.queryPermission !== 'function') return 'denied';
+    try {
+      return await handle.queryPermission({ mode: 'readwrite' });
+    } catch (_) {
+      return 'denied';
+    }
+  }
+
+  async function ensureHandlePermission(handle) {
+    if (!handle || typeof handle.requestPermission !== 'function') return false;
+
+    const current = await queryHandlePermission(handle);
+    if (current === 'granted') return true;
+
+    try {
+      return await handle.requestPermission({ mode: 'readwrite' }) === 'granted';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function restoreCurrentFileHandle() {
+    if (testFsConfig?.currentFile) {
+      currentFileHandle = createTestFileHandle(testFsConfig.currentFile);
+      return;
+    }
+    if (!url.startsWith('file://') || !supportsFileSystemAccess) return;
+
+    try {
+      const handle = await getStoredFileHandle();
+      if (!handle) return;
+      const permission = await queryHandlePermission(handle);
+      if (permission === 'granted' || permission === 'prompt') {
+        currentFileHandle = handle;
+      } else {
+        await clearStoredFileHandle();
+      }
+    } catch (_) {
+      currentFileHandle = null;
+    }
+  }
+
+  async function ensureCurrentFileHandle() {
+    if (testFsConfig?.currentFile) {
+      currentFileHandle = currentFileHandle || createTestFileHandle(testFsConfig.currentFile);
+      return currentFileHandle;
+    }
+    if (!url.startsWith('file://') || !supportsFileSystemAccess) return null;
+
+    if (currentFileHandle && await ensureHandlePermission(currentFileHandle)) {
+      return currentFileHandle;
+    }
+
+    const [handle] = await window.showOpenFilePicker({
+      multiple: false,
+      excludeAcceptAllOption: false,
+      types: getMarkdownPickerTypes()
+    });
+
+    if (!handle || handle.kind !== 'file') return null;
+    if (handle.name !== getFilename()) {
+      showToast('현재 파일과 같은 이름의 파일을 선택해 주세요.');
+      return null;
+    }
+    if (!await ensureHandlePermission(handle)) {
+      showToast('파일 쓰기 권한이 필요합니다.');
+      return null;
+    }
+
+    currentFileHandle = handle;
+    await setStoredFileHandle(handle);
+    updateSaveButtons();
+    return handle;
+  }
+
+  async function writeMarkdownToHandle(handle) {
+    const writable = await handle.createWritable();
+    await writable.write(rawMarkdown);
+    await writable.close();
   }
 
   /** ──────────────────────────────
@@ -283,7 +552,10 @@
       <div class="chromemd-toolbar-right">
         <button id="btn-new-window" class="chromemd-btn chromemd-btn-icon" title="새 창으로 열기"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1h7a.5.5 0 01.5.5v2h1v-2A1.5 1.5 0 008.5 0h-7A1.5 1.5 0 000 1.5v9A1.5 1.5 0 001.5 12H4v-1H1.5a.5.5 0 01-.5-.5v-9a.5.5 0 01.5-.5z"/><path d="M6.5 4h7A1.5 1.5 0 0115 5.5v9a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 015 14.5v-9A1.5 1.5 0 016.5 4zm0 1a.5.5 0 00-.5.5v9a.5.5 0 00.5.5h7a.5.5 0 00.5-.5v-9a.5.5 0 00-.5-.5h-7z"/></svg></button>
         <button id="btn-print" class="chromemd-btn chromemd-btn-icon" title="인쇄 (Ctrl+P)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 1a2 2 0 00-2 2v1h10V3a2 2 0 00-2-2H5zm6 8H5a1 1 0 00-1 1v3h8v-3a1 1 0 00-1-1z"/><path d="M0 7a2 2 0 012-2h12a2 2 0 012 2v3a2 2 0 01-2 2h-1v-2a2 2 0 00-2-2H5a2 2 0 00-2 2v2H2a2 2 0 01-2-2V7zm2.5 1a.5.5 0 100-1 .5.5 0 000 1z"/></svg></button>
-        <button id="btn-save" class="chromemd-btn chromemd-btn-save" title="파일 저장 (Ctrl+S)">💾 저장</button>
+        <div class="chromemd-save-group" role="group" aria-label="저장">
+          <button id="btn-save" class="chromemd-btn chromemd-btn-save" title="현재 파일에 바로 저장 (Ctrl+S)" style="display:none">저장</button>
+          <button id="btn-save-as" class="chromemd-btn" title="다른 이름으로 저장">다른 이름</button>
+        </div>
       </div>
     `;
     body.appendChild(toolbar);
@@ -378,7 +650,10 @@
     document.getElementById('btn-view').addEventListener('click', () => setMode('view'));
     document.getElementById('btn-split').addEventListener('click', () => setMode('split'));
     document.getElementById('btn-edit').addEventListener('click', () => setMode('edit'));
-    document.getElementById('btn-save').addEventListener('click', saveFile);
+    if (showDirectSave) {
+      document.getElementById('btn-save').addEventListener('click', saveFile);
+    }
+    document.getElementById('btn-save-as').addEventListener('click', saveFileAs);
     document.getElementById('btn-sidebar-files').addEventListener('click', () => toggleSidebar('files'));
     document.getElementById('btn-sidebar-toc').addEventListener('click', () => toggleSidebar('toc'));
     document.getElementById('btn-print').addEventListener('click', () => window.print());
@@ -423,7 +698,7 @@
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        saveFile();
+        if (showDirectSave) saveFile();
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
         e.preventDefault();
@@ -821,18 +1096,54 @@
     isDirty = dirty;
     const indicator = document.getElementById('chromemd-dirty');
     if (indicator) indicator.style.display = dirty ? '' : 'none';
+    updateSaveButtons();
+  }
+
+  function updateSaveButtons() {
+    const saveBtn = document.getElementById('btn-save');
+    const saveAsBtn = document.getElementById('btn-save-as');
+    if (!saveBtn || !saveAsBtn) return;
+
+    saveBtn.style.display = showDirectSave ? '' : 'none';
+    if (!showDirectSave) {
+      saveBtn.disabled = true;
+      saveBtn.classList.remove('chromemd-btn-save-ready');
+      saveAsBtn.title = '다른 이름으로 저장';
+      return;
+    }
+
+    saveBtn.disabled = !isDirty;
+    saveBtn.classList.toggle('chromemd-btn-save-ready', isDirty);
+
+    if (url.startsWith('file://') && !testFsConfig) {
+      saveBtn.title = '현재 파일에 바로 저장 (네이티브 저장 사용 시 선택 창 없이 저장)';
+      saveAsBtn.title = '다른 이름으로 저장';
+      return;
+    }
+
+    if (canDirectSaveToCurrentFile() && supportsFileSystemAccess) {
+      saveBtn.title = currentFileHandle
+        ? '현재 파일에 바로 저장 (Ctrl+S)'
+        : '처음 한 번 현재 파일을 선택하면 이후 바로 저장됩니다 (Ctrl+S)';
+      saveAsBtn.title = '다른 이름으로 저장';
+      return;
+    }
+
+    saveBtn.title = '현재 환경에서는 다운로드로 저장합니다 (Ctrl+S)';
+    saveAsBtn.title = supportsFileSystemAccess
+      ? '다른 이름으로 저장'
+      : '브라우저 다운로드 방식으로 저장합니다';
   }
 
   /** ──────────────────────────────
    *  저장 / 다운로드
    * ────────────────────────────── */
-  function saveFile() {
-    const filename  = getFilename();
-    const blob      = new Blob([rawMarkdown], { type: 'text/markdown;charset=utf-8' });
+  function downloadFile(filename = getFilename()) {
+    const blob = new Blob([rawMarkdown], { type: 'text/markdown;charset=utf-8' });
     const objectUrl = URL.createObjectURL(blob);
 
     const a = document.createElement('a');
-    a.href     = objectUrl;
+    a.href = objectUrl;
     a.download = filename;
     a.style.display = 'none';
     document.body.appendChild(a);
@@ -840,9 +1151,97 @@
     document.body.removeChild(a);
 
     setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+  }
 
+  async function saveFile() {
+    if (!isDirty) return;
+
+    if (url.startsWith('file://') && !testFsConfig) {
+      const nativeResult = await saveViaNativeHost();
+      if (nativeResult && nativeResult.ok) {
+        markDirty(false);
+        showToast('저장됨: ' + (nativeResult.filename || getFilename()));
+        return;
+      }
+    }
+
+    if (canDirectSaveToCurrentFile() && supportsFileSystemAccess) {
+      try {
+        const handle = await ensureCurrentFileHandle();
+        if (!handle) return;
+        await writeMarkdownToHandle(handle);
+        markDirty(false);
+        showToast('저장됨: ' + handle.name);
+        return;
+      } catch (error) {
+        if (isAbortError(error)) return;
+        showToast('바로 저장에 실패해 다운로드로 저장합니다.');
+      }
+    }
+
+    const filename  = getFilename();
+    downloadFile(filename);
     markDirty(false);
-    showToast('💾 저장됨: ' + filename);
+    showToast('다운로드 저장됨: ' + filename);
+  }
+
+  async function saveFileAs() {
+    if (testFsConfig?.saveAsFile) {
+      const handle = createTestFileHandle(testFsConfig.saveAsFile);
+      await writeMarkdownToHandle(handle);
+
+      const isCurrentFile =
+        currentFileHandle &&
+        typeof currentFileHandle.isSameEntry === 'function' &&
+        await currentFileHandle.isSameEntry(handle);
+
+      if (isCurrentFile) {
+        currentFileHandle = handle;
+        markDirty(false);
+        updateSaveButtons();
+        showToast('저장됨: ' + handle.name);
+      } else {
+        showToast('다른 이름으로 저장됨: ' + handle.name);
+      }
+      return;
+    }
+
+    if (supportsFileSystemAccess) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: getFilename(),
+          excludeAcceptAllOption: false,
+          types: getMarkdownPickerTypes()
+        });
+        if (!handle) return;
+
+        await writeMarkdownToHandle(handle);
+
+        const isCurrentFile =
+          canDirectSaveToCurrentFile() &&
+          currentFileHandle &&
+          typeof currentFileHandle.isSameEntry === 'function' &&
+          await currentFileHandle.isSameEntry(handle);
+
+        if (isCurrentFile) {
+          currentFileHandle = handle;
+          await setStoredFileHandle(handle);
+          markDirty(false);
+          updateSaveButtons();
+          showToast('저장됨: ' + handle.name);
+        } else {
+          showToast('다른 이름으로 저장됨: ' + handle.name);
+        }
+        return;
+      } catch (error) {
+        if (isAbortError(error)) return;
+        showToast('다른 이름으로 저장에 실패해 다운로드로 저장합니다.');
+      }
+    }
+
+    const filename  = getFilename();
+    downloadFile(filename);
+    showToast('다운로드 저장됨: ' + filename);
   }
 
   /** ──────────────────────────────

@@ -1,3 +1,7 @@
 test-sidebar.html
 test-ui.html
 test-ui.md
+output/
+__pycache__/
+*.pyc
+.DS_Store

@@ -202,6 +202,20 @@ body#chromemd-root {
   border-color: var(--color-btn-border-hover);
 }
 
+.chromemd-btn:disabled {
+  cursor: default;
+  color: var(--color-fg-muted);
+  background: var(--color-canvas-subtle);
+  border-color: var(--color-border);
+  box-shadow: none;
+  opacity: 1;
+}
+
+.chromemd-btn:disabled:hover {
+  background: var(--color-canvas-subtle);
+  border-color: var(--color-border);
+}
+
 /* 포커스 링 (접근성) */
 .chromemd-btn:focus-visible {
   outline-color: var(--color-btn-active-bg);
@@ -226,14 +240,31 @@ body#chromemd-root {
 }
 
 .chromemd-btn-save {
+  background: var(--color-canvas-subtle);
+  border-color: var(--color-border);
+  color: var(--color-fg-muted);
+}
+
+.chromemd-btn-save:hover {
+  background: var(--color-canvas-subtle);
+  border-color: var(--color-border);
+}
+
+.chromemd-btn-save.chromemd-btn-save-ready {
   background: var(--color-btn-save-bg);
   border-color: var(--color-btn-save-border);
   color: #ffffff;
 }
 
-.chromemd-btn-save:hover {
+.chromemd-btn-save.chromemd-btn-save-ready:hover {
   background: var(--color-btn-save-hover);
   border-color: var(--color-btn-save-hover);
+}
+
+.chromemd-save-group {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
 }
 
 /* ── 모드 전환 세그먼트 컨트롤 ───────────────────────────────── */
@@ -964,3 +995,26 @@ body#chromemd-root {
   }
 }
 
+@media (max-width: 900px) {
+  #chromemd-toolbar {
+    flex-wrap: wrap;
+    height: auto;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .chromemd-toolbar-left,
+  .chromemd-toolbar-center,
+  .chromemd-toolbar-right {
+    width: 100%;
+  }
+
+  .chromemd-toolbar-center {
+    justify-content: center;
+  }
+
+  .chromemd-toolbar-right {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+}

@@ -13,7 +13,8 @@
     "tabs",
     "scripting",
     "windows",
-    "storage"
+    "storage",
+    "nativeMessaging"
   ],
   "options_ui": {
     "page": "options.html",
